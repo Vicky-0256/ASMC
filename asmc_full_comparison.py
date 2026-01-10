@@ -33,6 +33,10 @@ from grader_utils.parse_utils import parse_answer
 from grader_utils.math_grader import grade_answer
 from constants import PROMPT, COT, BASE
 
+# Compute tracking
+from compute_tracker import ComputeTracker
+from compute_instrumentation import instrument_model
+
 
 def format_prompt(question, model_name, tokenizer, cot=True):
     """Format prompt based on model type."""
@@ -577,14 +581,15 @@ def main():
         
         # ============ 1. ASMC ============
         if args.run_asmc:
-            t0 = time.time()
+            asmc_tracker = ComputeTracker()
             c = len(context)
             N = asmc_config.n_particles
             try:
-                particles, _, _, diagnostics = asmc_sampler.sample(
-                    context, asmc_config, verbose=args.verbose
-                )
-                elapsed = time.time() - t0
+                with instrument_model(hf_model, asmc_tracker):
+                    particles, _, _, diagnostics = asmc_sampler.sample(
+                        context, asmc_config, verbose=args.verbose
+                    )
+                asmc_compute = asmc_tracker.get_stats()
 
                 # ===== RE-DO VOTING BASED ON args.asmc_vote_mode =====
                 if args.asmc_vote_mode == "weighted":
@@ -618,12 +623,12 @@ def main():
 
                 if is_correct:
                     stats['asmc']['correct'] += 1
-                stats['asmc']['time'] += elapsed
+                stats['asmc']['time'] += asmc_compute['total_time']
 
                 result["asmc_completion"] = completion
                 result["asmc_answer"] = best_answer
                 result["asmc_correct"] = is_correct
-                result["asmc_time"] = elapsed
+                result["asmc_time"] = asmc_compute['total_time']
                 result["asmc_mass_top"] = mass_top
                 result["asmc_n_resamples"] = diagnostics.get("n_resamples", 0)
                 result["asmc_pass_type"] = diagnostics.get("pass_type", "single")
@@ -637,11 +642,19 @@ def main():
                 result["asmc_n_parsed"] = vote_info.get("n_parsed", 0)
                 result["asmc_parse_rate"] = vote_info.get("n_parsed", 0) / N
 
+                # ===== COMPUTE TRACKING FIELDS =====
+                result["asmc_prefill_flops"] = asmc_compute['prefill_flops']
+                result["asmc_decode_flops"] = asmc_compute['decode_flops']
+                result["asmc_total_flops"] = asmc_compute['total_flops']
+                result["asmc_n_prefill"] = asmc_compute['n_prefill']
+                result["asmc_n_decode"] = asmc_compute['n_decode']
+                result["asmc_total_tokens"] = asmc_compute['total_tokens']
+
             except Exception as e:
                 result["asmc_completion"] = f"ERROR: {e}"
                 result["asmc_answer"] = None
                 result["asmc_correct"] = False
-                result["asmc_time"] = time.time() - t0
+                result["asmc_time"] = asmc_tracker.total_time
                 result["asmc_mass_top"] = None
                 result["asmc_n_resamples"] = None
                 result["asmc_pass_type"] = "error"
@@ -651,15 +664,22 @@ def main():
                 result["asmc_unique_sequences_final"] = None
                 result["asmc_n_parsed"] = None
                 result["asmc_parse_rate"] = None
+                result["asmc_prefill_flops"] = None
+                result["asmc_decode_flops"] = None
+                result["asmc_total_flops"] = None
+                result["asmc_n_prefill"] = None
+                result["asmc_n_decode"] = None
+                result["asmc_total_tokens"] = None
         
         # ============ 2. Naive Temperature Sampling ============
         if args.run_naive:
-            t0 = time.time()
+            naive_tracker = ComputeTracker()
             try:
-                _, naive_completion = naive_temp_sample(
-                    autoreg_sampler, context, args.temperature, args.max_tokens
-                )
-                elapsed = time.time() - t0
+                with instrument_model(hf_model, naive_tracker):
+                    _, naive_completion = naive_temp_sample(
+                        autoreg_sampler, context, args.temperature, args.max_tokens
+                    )
+                naive_compute = naive_tracker.get_stats()
                 
                 naive_answer = parse_answer(naive_completion)
                 
@@ -672,27 +692,42 @@ def main():
                 
                 if is_correct:
                     stats['naive']['correct'] += 1
-                stats['naive']['time'] += elapsed
+                stats['naive']['time'] += naive_compute['total_time']
                 
                 result["naive_completion"] = naive_completion
                 result["naive_answer"] = naive_answer
                 result["naive_correct"] = is_correct
-                result["naive_time"] = elapsed
+                result["naive_time"] = naive_compute['total_time']
+                
+                # ===== COMPUTE TRACKING FIELDS =====
+                result["naive_prefill_flops"] = naive_compute['prefill_flops']
+                result["naive_decode_flops"] = naive_compute['decode_flops']
+                result["naive_total_flops"] = naive_compute['total_flops']
+                result["naive_n_prefill"] = naive_compute['n_prefill']
+                result["naive_n_decode"] = naive_compute['n_decode']
+                result["naive_total_tokens"] = naive_compute['total_tokens']
                 
             except Exception as e:
                 result["naive_completion"] = f"ERROR: {e}"
                 result["naive_answer"] = None
                 result["naive_correct"] = False
-                result["naive_time"] = time.time() - t0
+                result["naive_time"] = naive_tracker.total_time
+                result["naive_prefill_flops"] = None
+                result["naive_decode_flops"] = None
+                result["naive_total_flops"] = None
+                result["naive_n_prefill"] = None
+                result["naive_n_decode"] = None
+                result["naive_total_tokens"] = None
         
         # ============ 3. Standard Sampling (temp=1.0) ============
         if args.run_std:
-            t0 = time.time()
+            std_tracker = ComputeTracker()
             try:
-                _, std_completion = std_sample(
-                    autoreg_sampler, context, args.max_tokens
-                )
-                elapsed = time.time() - t0
+                with instrument_model(hf_model, std_tracker):
+                    _, std_completion = std_sample(
+                        autoreg_sampler, context, args.max_tokens
+                    )
+                std_compute = std_tracker.get_stats()
                 
                 std_answer = parse_answer(std_completion)
                 
@@ -705,28 +740,43 @@ def main():
                 
                 if is_correct:
                     stats['std']['correct'] += 1
-                stats['std']['time'] += elapsed
+                stats['std']['time'] += std_compute['total_time']
                 
                 result["std_completion"] = std_completion
                 result["std_answer"] = std_answer
                 result["std_correct"] = is_correct
-                result["std_time"] = elapsed
+                result["std_time"] = std_compute['total_time']
+                
+                # ===== COMPUTE TRACKING FIELDS =====
+                result["std_prefill_flops"] = std_compute['prefill_flops']
+                result["std_decode_flops"] = std_compute['decode_flops']
+                result["std_total_flops"] = std_compute['total_flops']
+                result["std_n_prefill"] = std_compute['n_prefill']
+                result["std_n_decode"] = std_compute['n_decode']
+                result["std_total_tokens"] = std_compute['total_tokens']
                 
             except Exception as e:
                 result["std_completion"] = f"ERROR: {e}"
                 result["std_answer"] = None
                 result["std_correct"] = False
-                result["std_time"] = time.time() - t0
+                result["std_time"] = std_tracker.total_time
+                result["std_prefill_flops"] = None
+                result["std_decode_flops"] = None
+                result["std_total_flops"] = None
+                result["std_n_prefill"] = None
+                result["std_n_decode"] = None
+                result["std_total_tokens"] = None
         
         # ============ 4. MCMC Power Sampling ============
         if args.run_mcmc:
-            t0 = time.time()
+            mcmc_tracker = ComputeTracker()
             try:
-                _, mcmc_completion, accept_ratio = mcmc_power_sample(
-                    autoreg_sampler, context, args.temperature, 
-                    args.mcmc_steps, args.max_tokens, args.mcmc_blocks
-                )
-                elapsed = time.time() - t0
+                with instrument_model(hf_model, mcmc_tracker):
+                    _, mcmc_completion, accept_ratio = mcmc_power_sample(
+                        autoreg_sampler, context, args.temperature, 
+                        args.mcmc_steps, args.max_tokens, args.mcmc_blocks
+                    )
+                mcmc_compute = mcmc_tracker.get_stats()
                 
                 mcmc_answer = parse_answer(mcmc_completion)
                 
@@ -739,31 +789,46 @@ def main():
                 
                 if is_correct:
                     stats['mcmc']['correct'] += 1
-                stats['mcmc']['time'] += elapsed
+                stats['mcmc']['time'] += mcmc_compute['total_time']
                 stats['mcmc']['accept'] += accept_ratio
                 
                 result["mcmc_completion"] = mcmc_completion
                 result["mcmc_answer"] = mcmc_answer
                 result["mcmc_correct"] = is_correct
-                result["mcmc_time"] = elapsed
+                result["mcmc_time"] = mcmc_compute['total_time']
                 result["mcmc_accept_ratio"] = accept_ratio
+                
+                # ===== COMPUTE TRACKING FIELDS =====
+                result["mcmc_prefill_flops"] = mcmc_compute['prefill_flops']
+                result["mcmc_decode_flops"] = mcmc_compute['decode_flops']
+                result["mcmc_total_flops"] = mcmc_compute['total_flops']
+                result["mcmc_n_prefill"] = mcmc_compute['n_prefill']
+                result["mcmc_n_decode"] = mcmc_compute['n_decode']
+                result["mcmc_total_tokens"] = mcmc_compute['total_tokens']
                 
             except Exception as e:
                 result["mcmc_completion"] = f"ERROR: {e}"
                 result["mcmc_answer"] = None
                 result["mcmc_correct"] = False
-                result["mcmc_time"] = time.time() - t0
+                result["mcmc_time"] = mcmc_tracker.total_time
                 result["mcmc_accept_ratio"] = 0.0
+                result["mcmc_prefill_flops"] = None
+                result["mcmc_decode_flops"] = None
+                result["mcmc_total_flops"] = None
+                result["mcmc_n_prefill"] = None
+                result["mcmc_n_decode"] = None
+                result["mcmc_total_tokens"] = None
         
         # ============ 5. Naive + Majority Voting (Fair Baseline) ============
         if args.run_majority:
-            t0 = time.time()
+            majority_tracker = ComputeTracker()
             try:
-                maj_completion, maj_answer, vote_info = naive_majority_vote(
-                    autoreg_sampler, context, args.temperature, 
-                    args.max_tokens, n_samples=args.n_particles
-                )
-                elapsed = time.time() - t0
+                with instrument_model(hf_model, majority_tracker):
+                    maj_completion, maj_answer, vote_info = naive_majority_vote(
+                        autoreg_sampler, context, args.temperature, 
+                        args.max_tokens, n_samples=args.n_particles
+                    )
+                majority_compute = majority_tracker.get_stats()
                 
                 is_correct = False
                 if maj_answer is not None:
@@ -774,28 +839,42 @@ def main():
                 
                 if is_correct:
                     stats['majority']['correct'] += 1
-                stats['majority']['time'] += elapsed
+                stats['majority']['time'] += majority_compute['total_time']
                 
                 result["majority_completion"] = maj_completion
                 result["majority_answer"] = maj_answer
                 result["majority_correct"] = is_correct
-                result["majority_time"] = elapsed
+                result["majority_time"] = majority_compute['total_time']
                 result["majority_n_samples"] = vote_info["n_samples"]
                 result["majority_n_valid"] = vote_info["n_valid"]
                 result["majority_n_unique"] = vote_info["n_unique"]
                 result["majority_best_count"] = vote_info["best_count"]
                 result["majority_mass"] = vote_info["best_mass"]
                 
+                # ===== COMPUTE TRACKING FIELDS =====
+                result["majority_prefill_flops"] = majority_compute['prefill_flops']
+                result["majority_decode_flops"] = majority_compute['decode_flops']
+                result["majority_total_flops"] = majority_compute['total_flops']
+                result["majority_n_prefill"] = majority_compute['n_prefill']
+                result["majority_n_decode"] = majority_compute['n_decode']
+                result["majority_total_tokens"] = majority_compute['total_tokens']
+                
             except Exception as e:
                 result["majority_completion"] = f"ERROR: {e}"
                 result["majority_answer"] = None
                 result["majority_correct"] = False
-                result["majority_time"] = time.time() - t0
+                result["majority_time"] = majority_tracker.total_time
                 result["majority_n_samples"] = args.n_particles
                 result["majority_n_valid"] = 0
                 result["majority_n_unique"] = 0
                 result["majority_best_count"] = 0
                 result["majority_mass"] = 0.0
+                result["majority_prefill_flops"] = None
+                result["majority_decode_flops"] = None
+                result["majority_total_flops"] = None
+                result["majority_n_prefill"] = None
+                result["majority_n_decode"] = None
+                result["majority_total_tokens"] = None
         
         results.append(result)
         
