@@ -402,21 +402,6 @@ function SystemSection() {
       </SectionHeader>
       <div className="grid gap-5">
         <FigurePanel
-          eyebrow="System Schematic"
-          title="Incremental KV-cache update path"
-          icon={<Workflow size={18} aria-hidden="true" />}
-          href={figureSrc("KV_cache.png")}
-          captionLabel="System schematic"
-          caption="The implementation keeps generation incremental: logits come from the current KV cache, token updates append to cached state, and particle-bound tensors remain aligned with the active particle dimension."
-        >
-          <FigureImage
-            src={figureSrc("KV_cache.png")}
-            alt="KV cache update path showing initialization, per-token generation, logits processing, sampling, weight update, and incremental KV-cache update."
-            minWidth="min-w-[1180px]"
-          />
-        </FigurePanel>
-
-        <FigurePanel
           eyebrow="Paper Figure 3"
           title="System cost of a resampling event"
           icon={<Activity size={18} aria-hidden="true" />}
