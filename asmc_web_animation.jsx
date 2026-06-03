@@ -61,6 +61,8 @@ const TAKEAWAYS = [
   "Adaptive-N spends more compute only on hard problems.",
 ];
 
+const figureSrc = (fileName) => `${import.meta.env.BASE_URL}figures/${fileName}`;
+
 function focusClass() {
   return "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:ring-offset-[#fcfbf8]";
 }
@@ -248,12 +250,12 @@ function MotivationSection() {
           eyebrow="Supplementary Figure"
           title="ASMC parallel particle search versus sequential MH"
           icon={<Workflow size={18} aria-hidden="true" />}
-          href="/figures/ASMC_vs_MH.png"
+          href={figureSrc("ASMC_vs_MH.png")}
           captionLabel="Supplementary Figure"
           caption="The paper contrasts ASMC's batched particle population with MH's single-chain mutate-and-accept loop; rejection in MH wastes compute and preserves serial dependence."
         >
           <FigureImage
-            src="/figures/ASMC_vs_MH.png"
+            src={figureSrc("ASMC_vs_MH.png")}
             alt="Algorithmic comparison of ASMC and Metropolis-Hastings sampling for reasoning."
             minWidth="min-w-[860px]"
           />
@@ -309,12 +311,12 @@ function MethodDetailsSection() {
           eyebrow="Paper Figure 1"
           title="Method overview"
           icon={<Workflow size={18} aria-hidden="true" />}
-          href="/figures/ASMC_newest.png"
+          href={figureSrc("ASMC_newest.png")}
           captionLabel="Paper Figure 1"
           caption="ASMC evolves particles in parallel and applies the same ancestry map to particle state and KV cache state after resampling."
         >
           <FigureImage
-            src="/figures/ASMC_newest.png"
+            src={figureSrc("ASMC_newest.png")}
             alt="ASMC method diagram showing parallel expansion, particle weight updates, residual resampling, KV cache reorder, early stop, weighted vote, and hard pass restart."
             minWidth="min-w-[760px]"
           />
@@ -336,12 +338,12 @@ function ResultsSection() {
           eyebrow="Paper Figure 2"
           title="Accuracy vs. p95 latency"
           icon={<BarChart3 size={18} aria-hidden="true" />}
-          href="/figures/acc_vs_p95.png"
+          href={figureSrc("acc_vs_p95.png")}
           captionLabel="Paper Figure 2"
           caption="ASMC and ASMC-adaptive occupy high-accuracy, low-tail-latency operating points, while sequential MCMC moves far to the high-p95 region."
         >
             <FigureImage
-              src="/figures/acc_vs_p95.png"
+              src={figureSrc("acc_vs_p95.png")}
               alt="Accuracy versus p95 latency frontier on MATH500 comparing Naive, Best-of-N, MCMC, ASMC, and ASMC-adaptive."
               minWidth="min-w-[560px]"
             />
@@ -403,12 +405,12 @@ function SystemSection() {
           eyebrow="System Schematic"
           title="Incremental KV-cache update path"
           icon={<Workflow size={18} aria-hidden="true" />}
-          href="/figures/KV_cache.png"
+          href={figureSrc("KV_cache.png")}
           captionLabel="System schematic"
           caption="The implementation keeps generation incremental: logits come from the current KV cache, token updates append to cached state, and particle-bound tensors remain aligned with the active particle dimension."
         >
           <FigureImage
-            src="/figures/KV_cache.png"
+            src={figureSrc("KV_cache.png")}
             alt="KV cache update path showing initialization, per-token generation, logits processing, sampling, weight update, and incremental KV-cache update."
             minWidth="min-w-[1180px]"
           />
@@ -418,13 +420,13 @@ function SystemSection() {
           eyebrow="Paper Figure 3"
           title="System cost of a resampling event"
           icon={<Activity size={18} aria-hidden="true" />}
-          href="/figures/figure2_e2.png"
+          href={figureSrc("figure2_e2.png")}
           captionLabel="Paper Figure 3"
           caption="KV reorder reduces event latency by 53–77× relative to prefix replay and remains feasible in regimes where rebuild hits timeout or OOM."
         >
             <EvidenceStrip items={SYSTEM_FACTS} />
             <FigureImage
-              src="/figures/figure2_e2.png"
+              src={figureSrc("figure2_e2.png")}
               alt="System cost of a resampling event: event latency versus sequence length, peak allocated memory, and feasibility for repeated events."
               minWidth="min-w-[980px]"
             />
@@ -445,13 +447,13 @@ function CollapseSection() {
           eyebrow="Paper Figure 4"
           title="Particle collapse diagnostics"
           icon={<ShieldCheck size={18} aria-hidden="true" />}
-          href="/figures/fig3_combined.png"
+          href={figureSrc("fig3_combined.png")}
           captionLabel="Paper Figure 4"
           caption="Frequent resampling and low ESSmin/N expose particle collapse, while residual versus multinomial resampling is secondary."
         >
             <EvidenceStrip items={COLLAPSE_FACTS} />
             <FigureImage
-              src="/figures/fig3_combined.png"
+              src={figureSrc("fig3_combined.png")}
               alt="Particle collapse diagnostics: accuracy versus resampling frequency, ESS distribution and CDF for correct versus incorrect problems, and residual versus multinomial resampling comparison."
               minWidth="min-w-[980px]"
             />
