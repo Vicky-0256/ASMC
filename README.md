@@ -74,7 +74,7 @@ Install Python 3.10 or 3.11 dependencies:
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+python -m pip install -e .
 ```
 
 The smoke profile uses PyTorch SDPA and does not require FlashAttention. The
@@ -122,8 +122,7 @@ public Qwen checkpoint, runs one prompt, and returns the weighted ASMC answer:
 ```python
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from asmc_sampler import ASMCConfig
-from asmc_batched import BatchedASMCSampler
+from asmc import ASMCConfig, BatchedASMCSampler
 
 model_id = "Qwen/Qwen2.5-Math-7B"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -159,7 +158,7 @@ isolates this cache-reorder path.
 The low-level primitive is available without invoking the sampler:
 
 ```python
-from cache import reorder_past_key_values
+from asmc.cache import reorder_past_key_values
 
 past_key_values = reorder_past_key_values(past_key_values, ancestor_indices)
 ```

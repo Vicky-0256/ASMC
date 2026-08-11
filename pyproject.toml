@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cache-coherent-asmc"
+version = "0.1.0"
+description = "Cache-coherent adaptive sequential Monte Carlo for sequence-level power sampling in LLMs"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [
+  { name = "Ke Wang" },
+  { name = "Zehao Yu" },
+  { name = "Luwei Wang" },
+  { name = "Yongchao Huang" },
+]
+keywords = [
+  "sequence-level power sampling",
+  "adaptive sequential Monte Carlo",
+  "test-time scaling",
+  "LLM reasoning",
+  "KV cache",
+]
+dependencies = [
+  "torch>=2.4,<3",
+  "transformers==4.46.3",
+  "accelerate>=0.30,<2",
+  "numpy>=1.24,<3",
+  "tqdm>=4.66,<5",
+  "sympy>=1.12,<2",
+  "pylatexenc>=2.10,<3",
+  "safetensors>=0.4,<1",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=7.4,<9"]
+
+[project.urls]
+Homepage = "https://vicky-0256.github.io/ASMC/"
+Repository = "https://github.com/Vicky-0256/ASMC"
+Paper = "https://openreview.net/pdf?id=JN6wxUGmW8"
+
+# Transitional package mapping: the repository keeps root-level implementation
+# modules for existing runner scripts while exposing a standard `src/asmc`
+# namespace to installed applications.
+[tool.setuptools]
+packages = ["asmc", "grader_utils"]
+package-dir = { "asmc" = "src/asmc", "grader_utils" = "grader_utils" }
+py-modules = [
+  "answer_normalizer",
+  "asmc_batched",
+  "asmc_sampler",
+  "bestofn",
+  "cache",
+  "compute_instrumentation",
+  "compute_tracker",
+  "constants",
+]
+include-package-data = true
