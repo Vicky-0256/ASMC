@@ -4,6 +4,7 @@ message: >
   resampling, please cite the accompanying ICML 2026 paper.
 title: "ASMC: Cache-Coherent Adaptive Sequential Monte Carlo"
 type: software
+license: MIT
 authors:
   - family-names: Wang
     given-names: Ke

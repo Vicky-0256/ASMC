@@ -215,7 +215,7 @@ preferred paper citation and machine-readable software metadata.
 
 ## License
 
-A repository-level software license has not yet been selected. The maintainers
-must add one before the intended public release; dataset and third-party-code
-terms remain independent of that decision. See [`data/README.md`](data/README.md)
-for dataset provenance and redistribution notes.
+This repository's original code is released under the [MIT License](LICENSE).
+Dataset, model, and third-party-code terms remain independent of the software
+license; see [`data/README.md`](data/README.md) for dataset provenance and
+redistribution notes.
