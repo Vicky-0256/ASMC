@@ -28,6 +28,17 @@ and its historical figures are explanatory material, not a claim that the old
 paper numbers have been reproduced. The release status and audited ASMC path
 above remain authoritative.
 
+## Poster
+
+The project poster is displayed below. Click the preview to open the original
+PDF at full resolution.
+
+<p align="center">
+  <a href="AMSC_poster.pdf">
+    <img src="docs/assets/AMSC_poster.png" width="700" alt="ASMC project poster" />
+  </a>
+</p>
+
 ## What is included
 
 - `asmc_sampler.py`: reference ASMC implementation and answer-level voting.
