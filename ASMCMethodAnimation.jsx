@@ -814,18 +814,6 @@ export default function HeroWithModelAnimation({ onCopyBibtex, copyStatus }) {
   return (
     <section id="top" className="py-8 md:py-10">
       <div className="mx-auto max-w-5xl overflow-hidden px-1 text-center">
-        <div className="mb-4 flex justify-center">
-          <a
-            href="https://icml.cc/virtual/2026/poster/64829"
-            target="_blank"
-            rel="noreferrer"
-            aria-label="ICML 2026 poster page"
-            className={`paper-mono inline-flex items-center rounded border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 ${focusClass()}`}
-          >
-            ICML 2026 <span className="mx-2 text-slate-300" aria-hidden="true">/</span> Poster 64829
-          </a>
-        </div>
-
         <h1 className="paper-serif text-[2.25rem] font-semibold leading-[1.02] tracking-tight text-slate-950 sm:text-5xl md:text-7xl">
           <span className="block sm:inline">Cache-Coherent</span>{" "}
           <span className="block sm:inline">ASMC</span>
