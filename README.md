@@ -8,7 +8,7 @@ Official implementation of the ICML 2026 paper:
 via Adaptive Sequential Monte Carlo**
 
 [Paper](https://openreview.net/pdf?id=JN6wxUGmW8) · [Project Page](https://vicky-0256.github.io/ASMC/) ·
-[Poster](#poster) · [Citation](CITATION.cff)
+[Citation](CITATION.cff)
 
 ---
 
@@ -235,17 +235,6 @@ with GPU-parallel particles. They emphasize complementary aspects:
 We view ASMC and Power-SMC as concurrent and complementary approaches to
 efficient sequence-level power sampling. Full related-work BibTeX entries are
 in [`docs/related_work.md`](docs/related_work.md).
-
-## Poster
-
-The project poster is displayed below. Click the preview to open the original
-PDF at full resolution.
-
-<p align="center">
-  <a href="AMSC_poster.pdf">
-    <img src="docs/assets/AMSC_poster.png" width="700" alt="ASMC project poster" />
-  </a>
-</p>
 
 ## Citation
 
