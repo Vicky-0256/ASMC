@@ -8,7 +8,7 @@ Official implementation of the ICML 2026 paper:
 via Adaptive Sequential Monte Carlo**
 
 [Paper](https://openreview.net/pdf?id=JN6wxUGmW8) · [Poster](ASMC_poster.pdf) · [Project Page](https://vicky-0256.github.io/ASMC/) ·
-[Citation](CITATION.cff)
+[Citation](CITATION.cff) · [Discussions](https://github.com/Vicky-0256/ASMC/discussions)
 
 > **Artifact status**
 >
@@ -255,6 +255,13 @@ emphasizing complementary aspects:
 We view the two works as complementary contributions toward practical
 particle-based sequence-level power sampling. Full related-work BibTeX entries
 are in [`docs/related_work.md`](docs/related_work.md).
+
+## Community
+
+Use [GitHub Discussions](https://github.com/Vicky-0256/ASMC/discussions) for
+reproduction questions and answers, result interpretation, and research ideas.
+Use [Issues](https://github.com/Vicky-0256/ASMC/issues) for concrete bugs,
+feature requests, and implementation tasks.
 
 ## Citation
 
