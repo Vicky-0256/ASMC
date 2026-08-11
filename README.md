@@ -116,26 +116,36 @@ run.
 
 ## Python API
 
-The cache-coherent sampler can be called directly after loading any compatible
-Hugging Face causal language model and tokenizer:
+The sampler is also a reusable method library. This minimal example loads the
+public Qwen checkpoint, runs one prompt, and returns the weighted ASMC answer:
 
 ```python
-from asmc_batched import asmc_generate_batch
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 from asmc_sampler import ASMCConfig
+from asmc_batched import BatchedASMCSampler
 
+model_id = "Qwen/Qwen2.5-Math-7B"
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+model = AutoModelForCausalLM.from_pretrained(
+    model_id, torch_dtype=torch.bfloat16, device_map="auto"
+)
+prompt_ids = tokenizer("Solve: 2 + 2 = ?", return_tensors="pt").input_ids[0].tolist()
 config = ASMCConfig(
-    n_particles=16,
+    n_particles=4,
     block_size=32,
-    max_new_tokens=512,
+    max_new_tokens=256,
     alpha_star=4.0,
 )
-completion_ids, answer, diagnostics = asmc_generate_batch(
-    model, tokenizer, prompt_ids, config, device=model.device
-)
+sampler = BatchedASMCSampler(model, tokenizer, device=model.device)
+particles, answer, best_particle, diagnostics = sampler.sample(prompt_ids, config)
+completion = tokenizer.decode(best_particle.tokens[len(prompt_ids):], skip_special_tokens=True)
+print(answer, completion)
 ```
 
-Use `enable_adaptive=True` for the fast/hard population policy. For capped
-adaptive runs, provide a numeric `c_int_cap` and use the batched backend.
+Use `enable_adaptive=True` for the fast/hard population policy. The actual
+configuration field is `alpha_star` (the target exponent), and `sample()`
+returns particles, the voted answer, the best particle, and diagnostics.
 
 ## Cache-Coherent Resampling
 
@@ -145,6 +155,17 @@ the resampling update scales with the particle population and cached sequence
 length rather than repeating the full prefix computation. The optional
 [`microbench/cache_resampling.py`](microbench/cache_resampling.py) benchmark
 isolates this cache-reorder path.
+
+The low-level primitive is available without invoking the sampler:
+
+```python
+from cache import reorder_past_key_values
+
+past_key_values = reorder_past_key_values(past_key_values, ancestor_indices)
+```
+
+It supports both Transformers `DynamicCache` objects and legacy tuple caches;
+the same ancestor mapping must be applied to every particle-bound state.
 
 ## Reproducing the Paper
 

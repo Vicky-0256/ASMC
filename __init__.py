@@ -23,6 +23,7 @@ from .asmc_batched import (
     batched_asmc_sample,
     asmc_generate_batch,
 )
+from .cache import reorder_past_key_values
 
 __all__ = [
     'ASMCConfig',
@@ -33,6 +34,7 @@ __all__ = [
     'asmc_single_sample',
     'batched_asmc_sample',
     'asmc_generate_batch',
+    'reorder_past_key_values',
     'build_stop_token_ids',
     'weighted_voting_output',
     'compute_answer_masses',
