@@ -137,7 +137,10 @@ function StatStrip() {
     <div className="grid gap-3 border-y border-slate-200 py-4 sm:grid-cols-2 lg:grid-cols-4">
       {STATS.map(([label, value]) => (
         <div key={label} className="px-1">
-          <div className="paper-serif text-3xl font-semibold text-slate-950">{value}</div>
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+            <div className="paper-serif text-3xl font-semibold text-slate-950">{value}</div>
+            <EvidenceBadge />
+          </div>
           <div className="mt-1 text-sm text-slate-500">{label}</div>
         </div>
       ))}
@@ -148,7 +151,8 @@ function StatStrip() {
 function FigureCaption({ label, children }) {
   return (
     <p className="mt-3 text-sm leading-6 text-slate-600">
-      <span className="font-semibold text-slate-950">{label}.</span> {children}
+      <span className="font-semibold text-slate-950">{label}.</span>{" "}
+      <EvidenceBadge compact /> {children}
     </p>
   );
 }
@@ -205,11 +209,57 @@ function EvidenceStrip({ items }) {
       {items.map((item) => (
         <div key={item.label} className="rounded border border-slate-200 bg-slate-50 px-3 py-2.5">
           <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{item.label}</div>
-          <div className="paper-serif mt-1 text-2xl font-semibold tracking-tight text-slate-950">{item.value}</div>
+          <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+            <div className="paper-serif text-2xl font-semibold tracking-tight text-slate-950">{item.value}</div>
+            <EvidenceBadge compact />
+          </div>
           <div className="mt-1 text-xs leading-5 text-slate-600">{item.detail}</div>
         </div>
       ))}
     </div>
+  );
+}
+
+function EvidenceBadge({ kind = "paper", compact = false }) {
+  const label = kind === "artifact" ? "Artifact-verified result" : kind === "reproduced" ? "Reproduced by public artifact" : "Paper-reported result";
+  const tone = kind === "paper"
+    ? "border-amber-200 bg-amber-50 text-amber-800"
+    : "border-emerald-200 bg-emerald-50 text-emerald-800";
+  return (
+    <span
+      className={`paper-mono inline-flex w-fit items-center rounded border px-1.5 py-0.5 text-[9px] font-semibold uppercase leading-tight tracking-[0.06em] ${tone} ${compact ? "text-[8px]" : ""}`}
+    >
+      {label}
+    </span>
+  );
+}
+
+function ArtifactStatus() {
+  return (
+    <PaperCard className="mb-8 border-amber-200 bg-amber-50/70">
+      <CardContent className="p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.14em] text-slate-950">
+            <ShieldCheck size={18} className="text-amber-700" aria-hidden="true" />
+            Artifact status
+          </div>
+          <span className="paper-mono rounded border border-amber-200 bg-white/70 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-amber-800">
+            GPU rerun pending
+          </span>
+        </div>
+        <p className="paper-pretty mt-3 max-w-4xl text-sm leading-6 text-slate-700">
+          This page reports the ICML 2026 camera-ready results. The corrected public ASMC implementation and CPU tests are available. A corrected, audited 500-problem GPU rerun is pending. See{" "}
+          <a className="font-semibold text-blue-700 underline decoration-blue-300 underline-offset-2" href="https://github.com/Vicky-0256/ASMC/blob/main/docs/result_integrity.md" target="_blank" rel="noreferrer">Result Integrity</a>{" "}
+          and{" "}
+          <a className="font-semibold text-blue-700 underline decoration-blue-300 underline-offset-2" href="https://github.com/Vicky-0256/ASMC/blob/main/docs/reproducibility.md" target="_blank" rel="noreferrer">Reproducibility</a>{" "}
+          for the exact evidence boundary.
+        </p>
+        <div className="mt-4 flex flex-wrap items-center gap-2 text-xs leading-5 text-slate-600">
+          <EvidenceBadge />
+          <span>Current paper-facing numbers use this label until the corrected rerun is complete.</span>
+        </div>
+      </CardContent>
+    </PaperCard>
   );
 }
 
@@ -329,6 +379,7 @@ function MethodDetailsSection() {
 function ResultsSection() {
   return (
     <section id="results" className="py-14">
+      <ArtifactStatus />
       <SectionHeader number="3. Results" title="Accuracy improves without inheriting MCMC tail latency.">
         The deployment-facing comparison is the accuracy–p95 frontier, not just mean compute budget.
       </SectionHeader>
@@ -353,8 +404,8 @@ function ResultsSection() {
             <div className="mb-4 flex items-center gap-2 font-semibold text-slate-950"><Table2 size={18} aria-hidden="true" /> Selected MATH500 rows</div>
             <div className="overflow-hidden rounded border border-slate-200">
               <table className="w-full border-collapse text-sm" aria-label="Selected MATH500 latency-aware results">
-                <caption className="sr-only">Selected MATH500 latency-aware results with budget, method, accuracy, and p95 latency.</caption>
-                <thead className="bg-slate-50 text-left text-slate-600"><tr><th scope="col" className="border-b border-slate-200 px-3 py-2 font-semibold">Budget</th><th scope="col" className="border-b border-slate-200 px-3 py-2 font-semibold">Method</th><th scope="col" className="border-b border-slate-200 px-3 py-2 text-right font-semibold">Acc.</th><th scope="col" className="border-b border-slate-200 px-3 py-2 text-right font-semibold">p95</th></tr></thead>
+                <caption className="sr-only">Selected MATH500 latency-aware results with budget, method, accuracy, p95 latency, and evidence status. The evidence label applies to every numeric value in its row.</caption>
+                <thead className="bg-slate-50 text-left text-slate-600"><tr><th scope="col" className="border-b border-slate-200 px-3 py-2 font-semibold">Budget</th><th scope="col" className="border-b border-slate-200 px-3 py-2 font-semibold">Method</th><th scope="col" className="border-b border-slate-200 px-3 py-2 text-right font-semibold">Acc.</th><th scope="col" className="border-b border-slate-200 px-3 py-2 text-right font-semibold">p95</th><th scope="col" className="border-b border-slate-200 px-3 py-2 font-semibold">Evidence</th></tr></thead>
                 <tbody>{RESULT_ROWS.map((row, index) => {
                   const isAdaptive = row.method.includes("ASMC-adapt");
                   const isMcmc = row.method.includes("MCMC");
@@ -368,7 +419,7 @@ function ResultsSection() {
 
                   return (
                     <tr key={`${row.budget}-${row.method}`} className={rowTone}>
-                      <td className={`px-3 py-2 paper-mono text-xs ${isAdaptive ? "border-l-2 border-emerald-500" : isMcmc ? "border-l-2 border-red-400" : "border-l-2 border-transparent"}`}>{row.budget}</td>
+                      <td className={`px-3 py-2 paper-mono text-xs ${isAdaptive ? "border-l-2 border-emerald-500" : isMcmc ? "border-l-2 border-red-400" : "border-l-2 border-transparent"}`} aria-label={`${row.budget}, Paper-reported result`}>{row.budget}</td>
                       <td className="px-3 py-2">
                         <div className="flex min-w-0 flex-col gap-1">
                           <span>{row.method}</span>
@@ -379,8 +430,9 @@ function ResultsSection() {
                           )}
                         </div>
                       </td>
-                      <td className="px-3 py-2 text-right paper-mono text-xs">{row.acc}%</td>
-                      <td className="px-3 py-2 text-right paper-mono text-xs">{row.p95}s</td>
+                      <td className="px-3 py-2 text-right paper-mono text-xs" aria-label={`${row.acc}% accuracy, Paper-reported result`}>{row.acc}%</td>
+                      <td className="px-3 py-2 text-right paper-mono text-xs" aria-label={`${row.p95} seconds p95, Paper-reported result`}>{row.p95}s</td>
+                      <td className="px-3 py-2"><EvidenceBadge compact /></td>
                     </tr>
                   );
                 })}</tbody>
