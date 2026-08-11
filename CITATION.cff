@@ -28,6 +28,7 @@ keywords:
 preferred-citation:
   type: conference-paper
   title: "Cache Coherent Resampling for Efficient Test Time Scaling in LLM Reasoning via Adaptive Sequential Monte Carlo"
+  url: "https://openreview.net/pdf?id=JN6wxUGmW8"
   authors:
     - family-names: Wang
       given-names: Ke

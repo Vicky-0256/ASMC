@@ -7,7 +7,7 @@ Official implementation of the ICML 2026 paper:
 **Cache Coherent Resampling for Efficient Test Time Scaling in LLM Reasoning
 via Adaptive Sequential Monte Carlo**
 
-[Paper](ASMC_paper.pdf) · [Project Page](https://vicky-0256.github.io/ASMC/) ·
+[Paper](https://openreview.net/pdf?id=JN6wxUGmW8) · [Project Page](https://vicky-0256.github.io/ASMC/) ·
 [Poster](#poster) · [Citation](CITATION.cff)
 
 ---
