@@ -31,13 +31,13 @@ $$
 $$
 
 This is different from token-wise temperature scaling. With
-$T=1/α$, token temperature sampling gives
+$T=1/\alpha$, token temperature sampling gives
 
 $$
 q_T(x \mid c)
 = \prod_{t=1}^{|x|}
-\frac{p_\theta(x_t \mid x_{<t},c)^\alpha}
-     {\sum_v p_\theta(v \mid x_{<t},c)^\alpha}.
+\frac{p_\theta(x_t \mid x_{\lt t},c)^\alpha}
+     {\sum_v p_\theta(v \mid x_{\lt t},c)^\alpha}.
 $$
 
 The two distributions are generally not the same because token-wise
