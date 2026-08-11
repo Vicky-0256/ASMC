@@ -187,13 +187,54 @@ The current repository contains corrected code and CPU tests, but no corrected
 500-problem GPU rerun. Historical camera-ready numbers are therefore not
 claimed as reproduced.
 
-## Relation to Concurrent Work
+## Relation to Prior and Concurrent Work
 
-ASMC is complementary to trajectory-level MCMC/power sampling and distinct from
-token-wise temperature sampling: its target is the normalized power transform
-of the complete autoregressive sequence. The repository keeps several baseline
-implementations as optional research utilities, but they are not required for
-the ASMC release path or its acceptance audit.
+ASMC builds on probabilistic inference and sequence-level sampling for
+autoregressive language models.
+
+### Power Sampling for LLM Reasoning
+
+Karan and Du, [*Reasoning with Sampling: Your Base Model is Smarter Than You
+Think*](https://arxiv.org/abs/2510.14901) (ICLR 2026 Oral), introduced the power
+distribution as a training-free target for LLM reasoning:
+
+$$
+\pi_\alpha(x \mid c) \propto p_\theta(x \mid c)^\alpha,
+\qquad \alpha > 1.
+$$
+
+They showed why this sequence-level target differs from token-wise
+low-temperature sampling and used autoregressive Metropolis-Hastings/MCMC to
+approximately sample it. ASMC adopts the same objective but addresses a
+different bottleneck: it replaces the serial chain with a GPU-parallel
+population of weighted particles, adaptive particle allocation, and
+cache-coherent Transformer KV-state resampling.
+
+### Sequential Monte Carlo for Language Models
+
+Zhao et al., [*Probabilistic Inference in Language Models via Twisted
+Sequential Monte Carlo*](https://proceedings.mlr.press/v235/zhao24c.html) (ICML
+2024), established SMC as a framework for language-model inference under
+unnormalized sequence-level targets. Their learned twist functions estimate
+future potentials to guide partial sequences. ASMC instead defines its internal
+target solely from the base-model likelihood through
+$p_\theta(x \mid c)^\alpha$, without an external reward or learned twist.
+
+### Concurrent Particle Power Sampling
+
+[Power-SMC](https://arxiv.org/abs/2602.10273) (Azizi et al., 2026) is concurrent
+work that also applies SMC to the global sequence-level power distribution.
+Both methods target complete-trajectory power sampling and replace serial MCMC
+with GPU-parallel particles. They emphasize complementary aspects:
+
+- ASMC: adaptive fast-to-hard allocation, cache-coherent KV/state resampling,
+  deployment-oriented p50/p95 latency, and particle-collapse diagnostics;
+- Power-SMC: prefix-only proposal analysis, Rényi-entropy characterization of
+  weight instability, and exponent-bridging proposal stabilization.
+
+We view ASMC and Power-SMC as concurrent and complementary approaches to
+efficient sequence-level power sampling. Full related-work BibTeX entries are
+in [`docs/related_work.md`](docs/related_work.md).
 
 ## Poster
 
