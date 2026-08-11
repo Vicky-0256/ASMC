@@ -1,10 +1,11 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   Timer,
   Activity,
   BarChart3,
   Workflow,
   BookOpen,
+  Copy,
   Table2,
   ShieldCheck,
   CheckCircle2,
@@ -20,6 +21,7 @@ const NAV_ITEMS = [
   ["Results", "results"],
   ["System", "system"],
   ["Diagnostics", "collapse"],
+  ["Cite", "cite"],
 ];
 
 const STATS = [
@@ -60,6 +62,27 @@ const TAKEAWAYS = [
   "Ancestor maps reorder KV caches instead of replaying prefixes.",
   "Adaptive-N spends more compute only on hard problems.",
 ];
+
+const PAPER_BIBTEX = `@inproceedings{wang2026cache,
+  title     = {Cache Coherent Resampling for Efficient Test Time Scaling in LLM Reasoning via Adaptive Sequential Monte Carlo},
+  author    = {Wang, Ke and Yu, Zehao and Wang, Luwei and Huang, Yongchao},
+  booktitle = {Forty-third International Conference on Machine Learning},
+  year      = {2026}
+}`;
+
+const SOFTWARE_BIBTEX = `@software{wang2026asmc_software,
+  author  = {Wang, Ke and Yu, Zehao and Wang, Luwei and Huang, Yongchao},
+  title   = {ASMC: Cache-Coherent Adaptive Sequential Monte Carlo},
+  version = {0.1.0},
+  year    = {2026},
+  url     = {https://github.com/Vicky-0256/ASMC},
+  note    = {Use the version-specific release DOI when available}
+}`;
+
+const PAPER_APA = "Wang, K., Yu, Z., Wang, L., & Huang, Y. (2026). Cache coherent resampling for efficient test time scaling in LLM reasoning via adaptive sequential Monte Carlo. In Forty-third International Conference on Machine Learning.";
+const PAPER_PLAINTEXT = "Wang, Ke; Yu, Zehao; Wang, Luwei; Huang, Yongchao. \"Cache Coherent Resampling for Efficient Test Time Scaling in LLM Reasoning via Adaptive Sequential Monte Carlo.\" ICML 2026.";
+const SOFTWARE_APA = "Wang, K., Yu, Z., Wang, L., & Huang, Y. (2026). ASMC: Cache-Coherent Adaptive Sequential Monte Carlo (Version 0.1.0) [Computer software]. GitHub. https://github.com/Vicky-0256/ASMC";
+const SOFTWARE_PLAINTEXT = "Wang, Ke; Yu, Zehao; Wang, Luwei; Huang, Yongchao. ASMC: Cache-Coherent Adaptive Sequential Monte Carlo, version 0.1.0. GitHub, 2026.";
 
 const figureSrc = (fileName) => `${import.meta.env.BASE_URL}figures/${fileName}`;
 
@@ -260,6 +283,83 @@ function ArtifactStatus() {
         </div>
       </CardContent>
     </PaperCard>
+  );
+}
+
+function CitationSection({ id, onCopy, copiedFormat, compact = false }) {
+  return (
+    <section id={id} className={`py-10 ${compact ? "pt-6" : ""}`}>
+      <div className="mb-6 max-w-4xl">
+        <div className="mb-2 text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Citation</div>
+        <h2 className="paper-serif text-3xl font-semibold tracking-tight text-slate-950 md:text-4xl">Cite this work</h2>
+        <p className="paper-pretty mt-3 max-w-3xl text-base leading-7 text-slate-600">
+          Cite the paper when discussing the algorithm or research conclusions, and cite the versioned software when using a specific ASMC implementation.
+        </p>
+      </div>
+      <PaperCard>
+        <CardContent className="grid gap-7 p-5 sm:p-7">
+          <div className="grid gap-6 lg:grid-cols-2">
+            <div>
+              <h3 className="text-base font-semibold text-slate-950">Paper citation</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-600">Use this citation for the method, algorithm, and empirical research conclusions.</p>
+              <div className="mt-3 rounded border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-700">
+                <div className="paper-mono mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">APA</div>
+                {PAPER_APA}
+              </div>
+              <div className="mt-3 rounded border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-700">
+                <div className="paper-mono mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Plain text</div>
+                {PAPER_PLAINTEXT}
+              </div>
+            </div>
+            <div>
+              <h3 className="text-base font-semibold text-slate-950">Software citation</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-600">When using a specific code version, cite the versioned software record and its release DOI once one is minted.</p>
+              <div className="mt-3 rounded border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-700">
+                <div className="paper-mono mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">APA</div>
+                {SOFTWARE_APA}
+              </div>
+              <div className="mt-3 rounded border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-700">
+                <div className="paper-mono mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Plain text</div>
+                {SOFTWARE_PLAINTEXT}
+              </div>
+              <p className="mt-3 text-xs leading-5 text-slate-500">No release DOI has been assigned yet; the repository URL identifies the current software record.</p>
+            </div>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="min-w-0 rounded border border-slate-200 bg-white p-3">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <div className="paper-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Paper BibTeX</div>
+                <button type="button" onClick={() => onCopy(PAPER_BIBTEX, "paper-bibtex")} className={`inline-flex items-center gap-1.5 rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 ${focusClass()}`}>
+                  <Copy size={13} aria-hidden="true" /> {copiedFormat === "paper-bibtex" ? "Copied" : "Copy BibTeX"}
+                </button>
+              </div>
+              <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words text-xs leading-5 text-slate-700">{PAPER_BIBTEX}</pre>
+            </div>
+            <div className="min-w-0 rounded border border-slate-200 bg-white p-3">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <div className="paper-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Software BibTeX</div>
+                <button type="button" onClick={() => onCopy(SOFTWARE_BIBTEX, "software-bibtex")} className={`inline-flex items-center gap-1.5 rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 ${focusClass()}`}>
+                  <Copy size={13} aria-hidden="true" /> {copiedFormat === "software-bibtex" ? "Copied" : "Copy software BibTeX"}
+                </button>
+              </div>
+              <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words text-xs leading-5 text-slate-700">{SOFTWARE_BIBTEX}</pre>
+            </div>
+          </div>
+
+          <div className="rounded border border-blue-200 bg-blue-50/60 p-4">
+            <h3 className="text-base font-semibold text-slate-950">When to cite ASMC</h3>
+            <p className="mt-2 text-sm leading-6 text-slate-700">Cite this work when using or discussing:</p>
+            <ul className="mt-2 grid gap-1.5 pl-5 text-sm leading-6 text-slate-700">
+              <li className="list-disc">Sequential Monte Carlo for sequence-level power sampling in LLMs;</li>
+              <li className="list-disc">cache-coherent KV-state resampling without prefix replay;</li>
+              <li className="list-disc">adaptive particle allocation for test-time scaling;</li>
+              <li className="list-disc">ESS-based particle-collapse diagnostics in LLM reasoning.</li>
+            </ul>
+          </div>
+        </CardContent>
+      </PaperCard>
+    </section>
   );
 }
 
@@ -510,20 +610,46 @@ function TakeawaysSection() {
 }
 
 export default function ASMCPaperPage() {
+  const [copyStatus, setCopyStatus] = useState("");
+
+  async function copyCitation(value, key) {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(value);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = value;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        textarea.remove();
+      }
+      setCopyStatus(key);
+      window.setTimeout(() => setCopyStatus(""), 2200);
+    } catch {
+      setCopyStatus("");
+    }
+  }
+
   return (
     <div className="paper-page min-h-screen overflow-x-hidden bg-[#fcfbf8] text-slate-950">
       <DesignSystemStyles />
       <PaperBackground />
       <PaperNav />
       <main className="relative mx-auto min-w-0 max-w-[1180px] px-5 pb-16 lg:px-8">
-        <HeroWithModelAnimation />
+        <HeroWithModelAnimation onCopyBibtex={() => copyCitation(PAPER_BIBTEX, "paper-bibtex")} copyStatus={copyStatus} />
         <section id="abstract" className="paper-rule py-10"><div className="grid gap-6 lg:grid-cols-[180px_1fr]"><div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.18em] text-slate-500"><BookOpen size={16} aria-hidden="true" /> Abstract</div><p className="paper-pretty text-lg leading-8 text-slate-700">Test-time scaling can improve LLM reasoning without retraining, but sequential trajectory samplers suffer from poor GPU utilization and severe tail latency. ASMC uses a parallel particle population to approximate power-shaped trajectory distributions, while cache-coherent resampling keeps Transformer state consistent by reordering KV caches and particle-bound tensors under the ancestor map.</p></div></section>
+        <CitationSection id="cite" onCopy={copyCitation} copiedFormat={copyStatus} />
         <MotivationSection />
         <MethodDetailsSection />
         <ResultsSection />
         <SystemSection />
         <CollapseSection />
         <TakeawaysSection />
+        <CitationSection id="cite-footer" onCopy={copyCitation} copiedFormat={copyStatus} compact />
       </main>
     </div>
   );

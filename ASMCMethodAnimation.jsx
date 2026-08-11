@@ -11,6 +11,8 @@ import {
   Repeat2,
   GitBranch,
   Github,
+  BookOpen,
+  Copy,
   ChevronRight,
   ArrowRight,
 } from "lucide-react";
@@ -756,7 +758,7 @@ function ResolvePanel({ step, runtimeState, reducedMotion }) {
 }
 
 
-export default function HeroWithModelAnimation() {
+export default function HeroWithModelAnimation({ onCopyBibtex, copyStatus }) {
   const [isPlaying, setIsPlaying] = useState(true);
   const [speed, setSpeed] = useState(DEFAULT_SPEED);
   const [nHard, setNHard] = useState(DEFAULT_N_HARD);
@@ -847,12 +849,14 @@ export default function HeroWithModelAnimation() {
           <span>Yongchao Huang</span>
         </div>
 
-        <div className="mt-5 flex flex-wrap justify-center gap-3">
+        <div className="mt-5 flex flex-wrap justify-center gap-2.5">
           <a
-            href="#results"
+            href="https://openreview.net/pdf?id=JN6wxUGmW8"
+            target="_blank"
+            rel="noreferrer"
             className={`inline-flex items-center rounded bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 ${focusClass()}`}
           >
-            View results <ArrowRight className="ml-2" size={16} aria-hidden="true" />
+            <BookOpen className="mr-2" size={16} aria-hidden="true" /> Paper
           </a>
           <a
             href="https://github.com/Vicky-0256/ASMC"
@@ -863,10 +867,41 @@ export default function HeroWithModelAnimation() {
             <Github className="mr-2" size={16} aria-hidden="true" /> Code
           </a>
           <a
-            href="#abstract"
+            href="#demo"
             className={`inline-flex items-center rounded border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 ${focusClass()}`}
           >
-            Read summary
+            Interactive Demo
+          </a>
+          <button
+            type="button"
+            onClick={onCopyBibtex}
+            className={`inline-flex items-center rounded border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 ${focusClass()}`}
+          >
+            <Copy className="mr-2" size={16} aria-hidden="true" /> {copyStatus === "paper-bibtex" ? "Copied BibTeX" : "Copy BibTeX"}
+          </button>
+          <a
+            href="https://github.com/Vicky-0256/ASMC/blob/main/docs/reproducibility.md"
+            target="_blank"
+            rel="noreferrer"
+            className={`inline-flex items-center rounded border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 ${focusClass()}`}
+          >
+            Reproduce <ArrowRight className="ml-2" size={16} aria-hidden="true" />
+          </a>
+        </div>
+        <div className="mt-2 flex flex-wrap justify-center gap-2">
+          <a
+            href="https://icml.cc/virtual/2026/poster/64829"
+            target="_blank"
+            rel="noreferrer"
+            className={`inline-flex items-center rounded border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 ${focusClass()}`}
+          >
+            Poster
+          </a>
+          <a
+            href="#cite"
+            className={`inline-flex items-center rounded border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 ${focusClass()}`}
+          >
+            Cite this work
           </a>
         </div>
       </div>
