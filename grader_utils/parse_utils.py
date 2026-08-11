@@ -17,6 +17,10 @@ import numpy as np
 from typing import Optional, List, Tuple
 
 
+_SIGNED_DECIMAL = r"[+-]?(?:\d+\.\d+|\.\d+)"
+_SIGNED_NUMBER = r"[+-]?(?:\d+(?:\.\d+)?|\.\d+)"
+
+
 def _normalize(ans: str) -> str:
     """
     Normalize an answer string:
@@ -44,8 +48,9 @@ def _normalize(ans: str) -> str:
     if m:
         ans = m.group(1).strip()
     
-    # Strip trailing punctuation
-    ans = ans.strip(".").strip()
+    # Strip sentence-ending periods without deleting the decimal point from a
+    # conventional leading-decimal answer such as ``.35625``.
+    ans = ans.rstrip(".").strip()
     
     return ans
 
@@ -153,7 +158,7 @@ def _extract_print_outputs(text: str) -> List[str]:
         if re.match(r"^[+-]?\d+$", s):
             outputs.append(s)
         # Match standalone decimal
-        elif re.match(r"^[+-]?\d+\.\d+$", s):
+        elif re.match(rf"^{_SIGNED_DECIMAL}$", s):
             outputs.append(s)
         # Match standalone fraction
         elif re.match(r"^[+-]?\d+\s*/\s*\d+$", s):
@@ -287,7 +292,8 @@ def parse_answer_robust(input_str: str, return_source: bool = False, return_all:
     is_patterns = [
         r"\bis\s+\$([^$]+)\$",           # is $...$
         r"\bis\s+\\boxed\{([^}]+)\}",    # is \boxed{...}
-        r"\bis\s+(\d+(?:\.\d+)?)\b",     # is 6 or is 6.5
+        # is 6, is 6.5, or is .5; retain the prior non-word end boundary.
+        rf"\bis\s+({_SIGNED_NUMBER})(?!\w)",
         r"=\s*\$([^$]+)\$\s*[.\n]",      # = $...$.
     ]
     
@@ -316,7 +322,7 @@ def parse_answer_robust(input_str: str, return_source: bool = False, return_all:
         if re.match(r"^[+-]?\d+$", ln):
             candidates.append((10, ln, "fallback_number"))
             break
-        if re.match(r"^[+-]?\d+\.\d+$", ln):
+        if re.match(rf"^{_SIGNED_DECIMAL}$", ln):
             candidates.append((10, ln, "fallback_number"))
             break
         if re.match(r"^[+-]?\d+\s*/\s*\d+$", ln):

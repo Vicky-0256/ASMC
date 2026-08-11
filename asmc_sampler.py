@@ -9,7 +9,7 @@ Based on the design document:
 - Block-wise ESS-based systematic resampling
 - Answer-level weighted voting for output
 - Early stopping when mass_top >= 0.80
-- Adaptive budget: Fast pass (N=32) + Hard pass (N=96)
+- Adaptive budget: Fast pass (N/2) + Hard pass (N)
 """
 
 import math
@@ -22,15 +22,25 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 
+try:  # Package import
+    from .grader_utils.parse_utils import parse_answer_robust
+except ImportError:  # Direct script execution from the repository root
+    from grader_utils.parse_utils import parse_answer_robust
+
 
 @dataclass
 class ASMCConfig:
     """ASMC Sampler Configuration"""
     # Target distribution
     alpha_star: float = 4.0  # Final alpha (target = p^alpha_star)
+
+    # Per-instance integrated-attention budget for the cache-coherent batched
+    # backend. Enforcement is checked after each forward-backed generation
+    # update, so final C_int may overshoot by one model forward.
+    c_int_cap: Optional[float] = None
     
     # Particle settings
-    n_particles: int = 64  # Fast: 32, Hard: 96
+    n_particles: int = 64  # Fixed/hard population; adaptive fast defaults to N/2
     
     # Block settings
     block_size: int = 32  # Evaluate ESS every B tokens
@@ -48,13 +58,21 @@ class ASMCConfig:
     anneal_schedule: str = "cosine"  # "cosine" or "linear"
     
     # Output strategy
+    # The paper aggregates normalized particle weights directly.  Source
+    # reliability weighting is retained only as an explicit legacy mode.
+    use_source_weight: bool = False
     early_stop_mass_threshold: float = 0.80  # Early stop if mass_top >= this
     early_stop_min_tokens: int = 96  # Minimum tokens before early stopping (was 64)
-    early_stop_ess_frac: float = 0.25  # Only early-stop if ESS >= this * N (prevents single-particle domination)
+    # Uses the pre-resampling block ESS so a collapsed population cannot pass
+    # merely because resampling reset all log weights to zero.
+    early_stop_ess_frac: float = 0.25
     early_stop_min_parsed_frac: float = 0.30  # Only early-stop if n_parsed >= this * N
     early_stop_stable_checks: int = 2  # Require top_answer to be stable for this many consecutive checks
     
-    # EOS control (CRITICAL FIX for Problem 94)
+    # Historical EOS control. This changes the model distribution, so it is
+    # opt-in in the public implementation and retained only for replaying the
+    # original experiment protocol.
+    legacy_stop_constraints: bool = False
     min_eos_tokens: int = 128  # Hard mask EOS before this (Fast: 128, Hard: 256)
     prefer_non_eos_until: int = 512  # Soft penalty EOS until this (Fast: 512, Hard: 768)
     eos_penalty: float = 5.0  # Logit penalty for EOS during prefer_non_eos period
@@ -65,10 +83,12 @@ class ASMCConfig:
     rejuvenation_fraction: float = 0.25  # Fraction of particles to rejuvenate
     rejuvenation_window: int = 96  # Window size for rejuvenation
     
-    # Adaptive budget
-    enable_adaptive: bool = True
+    # Adaptive budget. By default the fast pass uses N/2 particles and the
+    # hard pass uses the configured maximum N, matching the paper protocol.
+    enable_adaptive: bool = False
     fast_mass_threshold: float = 0.65  # Fast pass succeeds if mass_top >= this
-    hard_n_particles: int = 64  # Reduced from 96 to avoid OOM on 80GB GPU
+    fast_n_particles: Optional[int] = None
+    hard_n_particles: Optional[int] = None
     hard_anneal_tokens: int = 768
     hard_alpha_start: float = 1.3
     hard_ess_threshold: float = 0.6
@@ -81,35 +101,120 @@ class ASMCConfig:
     hard_early_stop_ess_frac: float = 0.30
     hard_early_stop_min_parsed_frac: float = 0.40
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.use_source_weight, bool):
+            raise ValueError("use_source_weight must be boolean")
+        finite_fields = (
+            "alpha_star",
+            "ess_threshold",
+            "epsilon",
+            "alpha_start",
+            "early_stop_mass_threshold",
+            "early_stop_ess_frac",
+            "early_stop_min_parsed_frac",
+            "eos_penalty",
+            "rejuvenation_fraction",
+            "fast_mass_threshold",
+            "hard_alpha_start",
+            "hard_ess_threshold",
+            "hard_eos_penalty",
+            "hard_early_stop_mass_threshold",
+            "hard_early_stop_ess_frac",
+            "hard_early_stop_min_parsed_frac",
+        )
+        for name in finite_fields:
+            if not math.isfinite(float(getattr(self, name))):
+                raise ValueError(f"{name} must be finite")
+        if self.c_int_cap is not None:
+            if not math.isfinite(float(self.c_int_cap)) or self.c_int_cap <= 0:
+                raise ValueError("c_int_cap must be finite and positive when specified")
+        if self.n_particles < 1:
+            raise ValueError("n_particles must be positive")
+        if self.fast_n_particles is None:
+            self.fast_n_particles = max(1, self.n_particles // 2)
+        if self.hard_n_particles is None:
+            self.hard_n_particles = self.n_particles
+        if not 1 <= self.fast_n_particles <= self.hard_n_particles:
+            raise ValueError(
+                "adaptive particle counts must satisfy "
+                "1 <= fast_n_particles <= hard_n_particles"
+            )
+        if self.block_size < 1 or self.max_new_tokens < 1:
+            raise ValueError("block_size and max_new_tokens must be positive")
+        if self.anneal_tokens < 0 or self.hard_anneal_tokens < 0:
+            raise ValueError("anneal token counts must be non-negative")
+        if (
+            self.early_stop_min_tokens < 0
+            or self.hard_early_stop_min_tokens < 0
+            or self.min_eos_tokens < 0
+            or self.prefer_non_eos_until < 0
+            or self.hard_min_eos_tokens < 0
+            or self.hard_prefer_non_eos_until < 0
+        ):
+            raise ValueError("token thresholds must be non-negative")
+        if self.early_stop_stable_checks < 1:
+            raise ValueError("early_stop_stable_checks must be positive")
+        if self.rejuvenation_window < 1:
+            raise ValueError("rejuvenation_window must be positive")
+        if self.alpha_start <= 0 or self.hard_alpha_start <= 0 or self.alpha_star <= 0:
+            raise ValueError("alpha values must be positive")
+        unit_interval_fields = (
+            "ess_threshold",
+            "early_stop_mass_threshold",
+            "early_stop_ess_frac",
+            "early_stop_min_parsed_frac",
+            "rejuvenation_fraction",
+            "fast_mass_threshold",
+            "hard_ess_threshold",
+            "hard_early_stop_mass_threshold",
+            "hard_early_stop_ess_frac",
+            "hard_early_stop_min_parsed_frac",
+        )
+        for name in unit_interval_fields:
+            value = getattr(self, name)
+            if not 0.0 <= value <= 1.0:
+                raise ValueError(f"{name} must be between 0 and 1")
+        if not 0.0 < self.epsilon < 1.0:
+            raise ValueError("epsilon must be strictly between 0 and 1")
+        if self.eos_penalty < 0 or self.hard_eos_penalty < 0:
+            raise ValueError("EOS penalties must be non-negative")
+        if self.anneal_schedule not in {"cosine", "linear"}:
+            raise ValueError("anneal_schedule must be 'cosine' or 'linear'")
 
-def build_stop_token_ids(tokenizer) -> List[int]:
+
+def build_stop_token_ids(
+    tokenizer,
+    include_all_special: bool = False,
+) -> List[int]:
     """
-    Build list of stop token IDs that should be masked during sampling.
-    
-    Includes:
-    - eos_token_id (typically 151645 = <|im_end|> for Qwen)
-    - pad_token_id (if different)
-    - All special tokens (as insurance)
-    
-    Critical fix for Problem 94 where 35% of particles hit EOS at t=32.
+    Build the token IDs that terminate a particle.
+
+    The default matches ordinary autoregressive generation and includes only
+    EOS. ``include_all_special=True`` reproduces the historical ASMC behavior
+    that also treated padding and every special token as a stop token.
     """
     ids = set()
     
     # Add EOS token (must have)
-    if tokenizer.eos_token_id is not None:
-        ids.add(tokenizer.eos_token_id)
+    eos_ids = getattr(tokenizer, "eos_token_id", None)
+    if eos_ids is not None:
+        if isinstance(eos_ids, (list, tuple, set)):
+            ids.update(int(token_id) for token_id in eos_ids)
+        else:
+            ids.add(int(eos_ids))
     
     # Add pad token if different from EOS
-    if getattr(tokenizer, "pad_token_id", None) is not None:
-        ids.add(tokenizer.pad_token_id)
+    if include_all_special and getattr(tokenizer, "pad_token_id", None) is not None:
+        ids.add(int(tokenizer.pad_token_id))
     
     # Add all special tokens as insurance
     # (prevents early termination from any special token)
-    try:
-        for tid in tokenizer.all_special_ids:
-            ids.add(int(tid))
-    except Exception:
-        pass
+    if include_all_special:
+        try:
+            for tid in tokenizer.all_special_ids:
+                ids.add(int(tid))
+        except Exception:
+            pass
     
     return sorted(ids)
 
@@ -173,6 +278,9 @@ def compute_power_proposal_logprobs(
     Returns:
         log_q: Log probabilities under the mixture proposal (vocab_size,)
     """
+    if not 0.0 < epsilon < 1.0:
+        raise ValueError("epsilon must be strictly between 0 and 1")
+
     # Base log probabilities
     log_p = F.log_softmax(logits, dim=-1)
     
@@ -315,6 +423,7 @@ def asmc_sample(
     config: ASMCConfig,
     device,
     verbose: bool = False,
+    tracker=None,
 ) -> Tuple[List[Particle], Dict[str, Any]]:
     """
     Run ASMC sampling.
@@ -326,18 +435,30 @@ def asmc_sample(
         config: ASMC configuration
         device: Compute device
         verbose: Print progress
+        tracker: Optional ComputeTracker used by model instrumentation. The
+            sequential reference backend does not support C_int caps because
+            stopping within a population step would return partially updated
+            particles; use the batched public backend for capped runs.
     
     Returns:
         particles: Final list of particles
         diagnostics: Dictionary with diagnostics info
     """
+    if config.c_int_cap is not None:
+        raise ValueError(
+            "c_int_cap is supported only by the cache-coherent batched backend"
+        )
+
     N = config.n_particles
     c = len(context)
     max_len = c + config.max_new_tokens
     
     # Build stop token IDs if not already set
     if config.stop_token_ids is None:
-        config.stop_token_ids = build_stop_token_ids(tokenizer)
+        config.stop_token_ids = build_stop_token_ids(
+            tokenizer,
+            include_all_special=config.legacy_stop_constraints,
+        )
     
     # Initialize particles
     particles = [
@@ -366,9 +487,18 @@ def asmc_sample(
         "n_parsed_blocks": [],  # Track parsed answers per block
         "ess_blocks": [],  # ESS at each block boundary
         "stop_reason": None,  # early_stop / max_len / all_finished / error
+        "c_int_cap": config.c_int_cap,
+        "budget_exhausted": False,
+        "budget_exhausted_at_token": None,
         "gen_len_best": 0,  # Length of best particle completion
         "non_special_len_best": 0,  # Non-special token length
     }
+
+    if config.c_int_cap is not None and tracker.C_int >= config.c_int_cap:
+        diagnostics["budget_exhausted"] = True
+        diagnostics["budget_exhausted_at_token"] = -1
+        diagnostics["stop_reason"] = "budget_exhausted"
+        return particles, diagnostics
     
     # Token-by-token generation
     current_block_start = 0
@@ -408,7 +538,7 @@ def asmc_sample(
             
             # 🔴 CRITICAL FIX: Mask/penalize stop tokens to prevent Problem 94
             # This prevents 35% of particles from hitting EOS at t=32
-            if config.stop_token_ids:
+            if config.legacy_stop_constraints and config.stop_token_ids:
                 if t_gen < config.min_eos_tokens:
                     # Hard mask: completely prevent EOS generation
                     for stop_id in config.stop_token_ids:
@@ -436,16 +566,18 @@ def asmc_sample(
             if config.stop_token_ids and tok in config.stop_token_ids:
                 p.finished = True
                 n_eos_this_step += 1
-        
+
+
         # Accumulate EOS count for this block
         n_eos_this_block += n_eos_this_step
         diagnostics["tokens_generated"] = t_gen + 1
-        
+
         # Block-wise ESS evaluation and resampling
         if (t_gen + 1) % config.block_size == 0 or t_gen == config.max_new_tokens - 1:
             # Compute ESS
             logw = [p.log_weight for p in particles]
             ess = compute_ess_from_logw(logw)
+            ess_for_early_stop = ess
             diagnostics["ess_history"].append(ess)
             diagnostics["ess_blocks"].append(ess)
             
@@ -458,7 +590,12 @@ def asmc_sample(
             
             # Track parsed answers at this block
             try:
-                answer_masses, n_parsed, source_counts = compute_answer_masses(particles, tokenizer, c)
+                answer_masses, n_parsed, source_counts = compute_answer_masses(
+                    particles,
+                    tokenizer,
+                    c,
+                    use_source_weight=config.use_source_weight,
+                )
             except Exception:
                 n_parsed = 0
                 answer_masses = {}
@@ -499,7 +636,12 @@ def asmc_sample(
                 
                 # Recompute answer masses after resampling
                 try:
-                    answer_masses, n_parsed, source_counts = compute_answer_masses(particles, tokenizer, c)
+                    answer_masses, n_parsed, source_counts = compute_answer_masses(
+                        particles,
+                        tokenizer,
+                        c,
+                        use_source_weight=config.use_source_weight,
+                    )
                 except Exception:
                     answer_masses = {}
                     n_parsed = 0
@@ -513,19 +655,34 @@ def asmc_sample(
                     for idx in rejuv_indices:
                         particles[idx] = rejuvenate_particle(
                             model, tokenizer, particles[idx],
-                            config, c, device
+                            config, c, device, tracker=tracker
                         )
+                        if (
+                            config.c_int_cap is not None
+                            and tracker.C_int >= config.c_int_cap
+                        ):
+                            diagnostics["budget_exhausted"] = True
+                            diagnostics["budget_exhausted_at_token"] = t_gen
+                            diagnostics["stop_reason"] = "budget_exhausted"
+                            break
+
+                    if diagnostics["budget_exhausted"]:
+                        break
             
             # ====== STEP 2: EARLY-STOP CHECK (only if ESS is healthy) ======
             # CRITICAL: Only allow early-stop if ESS >= threshold (prevents single-particle domination)
-            if t_gen >= config.early_stop_min_tokens:
+            if t_gen + 1 >= config.early_stop_min_tokens:
                 ess_threshold_for_stop = config.early_stop_ess_frac * N
                 parsed_threshold_for_stop = config.early_stop_min_parsed_frac * N
                 
                 # Gate 1: ESS must be healthy
-                if ess < ess_threshold_for_stop:
+                if ess_for_early_stop < ess_threshold_for_stop:
                     if verbose:
-                        print(f"  Early-stop blocked: ESS={ess:.2f} < {ess_threshold_for_stop:.1f}")
+                        print(
+                            "  Early-stop blocked: pre-resampling "
+                            f"ESS={ess_for_early_stop:.2f} < "
+                            f"{ess_threshold_for_stop:.1f}"
+                        )
                 # Gate 2: Enough particles must have parsed answers
                 elif n_parsed < parsed_threshold_for_stop:
                     if verbose:
@@ -552,7 +709,12 @@ def asmc_sample(
                             diagnostics["early_stop_token"] = t_gen
                             diagnostics["stop_reason"] = "early_stop"
                             if verbose:
-                                print(f"  Early stop at t={t_gen}: mass={top_mass:.2f}, ESS={ess:.2f}, stable={stable_count}")
+                                print(
+                                    f"  Early stop at t={t_gen}: "
+                                    f"mass={top_mass:.2f}, "
+                                    f"pre-resampling ESS={ess_for_early_stop:.2f}, "
+                                    f"stable={stable_count}"
+                                )
                             break
                         else:
                             if verbose:
@@ -578,6 +740,7 @@ def rejuvenate_particle(
     config: ASMCConfig,
     context_len: int,
     device,
+    tracker=None,
 ) -> Particle:
     """
     Rejuvenate a particle by resampling its tail.
@@ -626,6 +789,13 @@ def rejuvenate_particle(
         new_tokens.append(tok)
         new_log_p_sum += log_p_tok
         new_log_q_sum += log_q_tok
+
+        if (
+            config.c_int_cap is not None
+            and tracker is not None
+            and tracker.C_int >= config.c_int_cap
+        ):
+            break
         
         if tok == tokenizer.eos_token_id:
             break
@@ -657,7 +827,7 @@ def compute_answer_masses(
     particles: List[Particle],
     tokenizer,
     context_len: int,
-    use_source_weight: bool = True,
+    use_source_weight: bool = False,
 ) -> Tuple[Dict[str, float], int, Dict[str, Dict[str, int]]]:
     """
     Compute answer-level weighted masses with source tracking.
@@ -670,8 +840,6 @@ def compute_answer_masses(
         n_parsed: Number of particles with successfully parsed answers
         source_counts: Dict mapping answer -> {source: count}
     """
-    from grader_utils.parse_utils import parse_answer_robust
-    
     # Get normalized weights
     logw = [p.log_weight for p in particles]
     weights = normalize_logweights(logw)
@@ -755,18 +923,20 @@ def weighted_voting_output(
     tokenizer,
     context_len: int,
     alpha_star: float = 4.0,
-    use_source_weight: bool = True,
+    use_source_weight: bool = False,
 ) -> Tuple[str, Particle, Dict[str, Any]]:
     """
-    Select output using answer-level weighted voting with source weighting.
+    Select output using answer-level weighted voting.
+
+    By default, normalized particle weights are aggregated directly, matching
+    the paper. ``use_source_weight=True`` enables the historical parser-source
+    reliability multipliers.
     
     Returns:
         best_answer: The answer with highest weighted mass
         best_particle: The particle with highest log pi among those with the best answer
         vote_info: Dictionary with voting information
     """
-    from grader_utils.parse_utils import parse_answer_robust
-    
     N = len(particles)
     
     # Get normalized weights
@@ -804,9 +974,11 @@ def weighted_voting_output(
             "n_parsed": 0,
             "gate_passed": True,
             "gate_reason": "no_answers",
+            "vote_method": "weighted",
+            "use_source_weight": use_source_weight,
         }
     
-    # Compute source-weighted mass for each answer
+    # Aggregate normalized particle mass, with optional legacy source weights.
     answer_masses = {}
     for ans, items in answer_to_particles.items():
         total_mass = 0.0
@@ -840,6 +1012,8 @@ def weighted_voting_output(
         "source_counts": source_counts,
         "gate_passed": gate_passed,
         "gate_reason": gate_reason,
+        "vote_method": "weighted",
+        "use_source_weight": use_source_weight,
     }
     
     return best_answer, best_particle, vote_info
@@ -850,7 +1024,7 @@ def unweighted_majority_voting(
     tokenizer,
     context_len: int,
     alpha_star: float = 4.0,
-    use_source_weight: bool = True,  # For majority_no_source mode (affects nothing in pure count mode, but kept for API consistency)
+    use_source_weight: bool = False,  # Kept for API consistency; pure counts ignore it.
 ) -> Tuple[str, Particle, Dict[str, Any]]:
     """
     Unweighted majority voting: each particle = 1 vote (ignore importance weights).
@@ -871,7 +1045,6 @@ def unweighted_majority_voting(
         vote_info: Dictionary with voting statistics
     """
     from collections import Counter
-    from grader_utils.parse_utils import parse_answer_robust
 
     N = len(particles)
     logw = [p.log_weight for p in particles]
@@ -941,119 +1114,12 @@ def unweighted_majority_voting(
     return best_answer, best_particle, vote_info
 
 
-def weighted_voting_with_verifier(
-    particles: List[Particle],
-    tokenizer,
-    context_len: int,
-    model,
-    device: torch.device,
-    problem: str,
-    alpha_star: float = 4.0,
-    use_source_weight: bool = True,
-    enable_verifier: bool = True,
-    verifier_top_k: int = 3,
-) -> Tuple[str, Particle, Dict[str, Any]]:
-    """
-    Weighted voting with optional verifier reranking.
-    
-    This is the main voting function that:
-    1. Computes source-weighted masses
-    2. Checks output_block gate
-    3. Optionally triggers verifier reranking
-    
-    Args:
-        particles: List of ASMC particles
-        tokenizer: Tokenizer
-        context_len: Context length
-        model: Model for verification (if enabled)
-        device: Torch device
-        problem: Problem text (for verification)
-        alpha_star: Temperature for log_pi
-        use_source_weight: Whether to use source weights
-        enable_verifier: Whether to enable verifier reranking
-        verifier_top_k: How many top answers to verify
-        
-    Returns:
-        best_answer, best_particle, vote_info
-    """
-    # First do standard voting
-    best_answer, best_particle, vote_info = weighted_voting_output(
-        particles, tokenizer, context_len, alpha_star, use_source_weight
-    )
-    
-    if not enable_verifier or best_answer is None:
-        vote_info["verifier_triggered"] = False
-        return best_answer, best_particle, vote_info
-    
-    # Check if verifier should be triggered
-    from verifier import should_trigger_verifier, verifier_rerank
-    
-    should_verify, trigger_reason = should_trigger_verifier(
-        vote_info["answer_masses"],
-        vote_info["source_counts"],
-        vote_info["gate_passed"],
-        vote_info["gate_reason"],
-    )
-    
-    vote_info["verifier_should_trigger"] = should_verify
-    vote_info["verifier_trigger_reason"] = trigger_reason
-    
-    if not should_verify:
-        vote_info["verifier_triggered"] = False
-        return best_answer, best_particle, vote_info
-    
-    # Run verifier reranking
-    vote_info["verifier_triggered"] = True
-    
-    reranked_answer, rerank_info = verifier_rerank(
-        model=model,
-        tokenizer=tokenizer,
-        problem=problem,
-        particles=particles,
-        answer_masses=vote_info["answer_masses"],
-        source_counts=vote_info["source_counts"],
-        context_len=context_len,
-        device=device,
-        top_k=verifier_top_k,
-    )
-    
-    vote_info["verifier_info"] = rerank_info
-    
-    if reranked_answer and reranked_answer != best_answer:
-        # Update best answer
-        vote_info["original_answer"] = best_answer
-        vote_info["verifier_changed_answer"] = True
-        best_answer = reranked_answer
-        vote_info["best_answer"] = best_answer
-        
-        # Find best particle for new answer
-        from grader_utils.parse_utils import parse_answer_robust
-        
-        best_log_pi = float("-inf")
-        for i, particle in enumerate(particles):
-            completion_ids = particle.tokens[context_len:]
-            completion = tokenizer.decode(completion_ids, skip_special_tokens=True)
-            answer, _ = parse_answer_robust(completion, return_source=True)
-            
-            if answer is not None and str(answer).strip() == best_answer:
-                log_pi = particle.log_p_sum * alpha_star
-                if log_pi > best_log_pi:
-                    best_log_pi = log_pi
-                    best_particle = particle
-                    vote_info["best_particle_idx"] = i
-    else:
-        vote_info["verifier_changed_answer"] = False
-    
-    return best_answer, best_particle, vote_info
-
-
 class ASMCSampler:
     """
     ASMC Sampler with adaptive budget.
     
-    Provides two-stage sampling:
-    1. Fast pass (N=32): Quick sampling, succeed if mass_top >= 0.65
-    2. Hard pass (N=96): Full sampling with rejuvenation for difficult problems
+    Provides two-stage sampling. By default the fast pass uses N/2 particles
+    and the hard pass uses N; optional rejuvenation follows the parent config.
     """
     
     def __init__(self, model, tokenizer, device):
@@ -1066,6 +1132,7 @@ class ASMCSampler:
         context: List[int],
         config: Optional[ASMCConfig] = None,
         verbose: bool = False,
+        tracker=None,
     ) -> Tuple[List[Particle], str, Particle, Dict[str, Any]]:
         """
         Run ASMC sampling with optional adaptive budget.
@@ -1081,24 +1148,38 @@ class ASMCSampler:
         
         # Build stop_token_ids if not already set
         if config.stop_token_ids is None:
-            config.stop_token_ids = build_stop_token_ids(self.tokenizer)
+            config.stop_token_ids = build_stop_token_ids(
+                self.tokenizer,
+                include_all_special=config.legacy_stop_constraints,
+            )
         
         c = len(context)
         
         if not config.enable_adaptive:
             # Single pass
             particles, diagnostics = asmc_sample(
-                self.model, self.tokenizer, context, config, self.device, verbose
+                self.model,
+                self.tokenizer,
+                context,
+                config,
+                self.device,
+                verbose,
+                tracker=tracker,
             )
             best_answer, best_particle, vote_info = weighted_voting_output(
-                particles, self.tokenizer, c, config.alpha_star
+                particles,
+                self.tokenizer,
+                c,
+                config.alpha_star,
+                use_source_weight=config.use_source_weight,
             )
             diagnostics["vote_info"] = vote_info
             return particles, best_answer, best_particle, diagnostics
         
         # Adaptive: Fast pass first
         fast_config = ASMCConfig(
-            n_particles=32,
+            c_int_cap=config.c_int_cap,
+            n_particles=config.fast_n_particles,
             alpha_star=config.alpha_star,
             block_size=config.block_size,
             max_new_tokens=config.max_new_tokens,
@@ -1107,13 +1188,15 @@ class ASMCSampler:
             anneal_tokens=config.anneal_tokens,
             alpha_start=config.alpha_start,
             anneal_schedule=config.anneal_schedule,
+            use_source_weight=config.use_source_weight,
             # Early stop settings (with new gates)
             early_stop_mass_threshold=config.early_stop_mass_threshold,
             early_stop_min_tokens=config.early_stop_min_tokens,
             early_stop_ess_frac=config.early_stop_ess_frac,
             early_stop_min_parsed_frac=config.early_stop_min_parsed_frac,
             early_stop_stable_checks=config.early_stop_stable_checks,
-            # EOS control
+            # Historical EOS control
+            legacy_stop_constraints=config.legacy_stop_constraints,
             min_eos_tokens=config.min_eos_tokens,
             prefer_non_eos_until=config.prefer_non_eos_until,
             eos_penalty=config.eos_penalty,
@@ -1123,16 +1206,31 @@ class ASMCSampler:
         )
         
         if verbose:
-            print("=== Fast Pass (N=32) ===")
+            print(f"=== Fast Pass (N={config.fast_n_particles}) ===")
         
         fast_particles, fast_diag = asmc_sample(
-            self.model, self.tokenizer, context, fast_config, self.device, verbose
+            self.model,
+            self.tokenizer,
+            context,
+            fast_config,
+            self.device,
+            verbose,
+            tracker=tracker,
         )
         
         best_answer, best_particle, vote_info = weighted_voting_output(
-            fast_particles, self.tokenizer, c, config.alpha_star
+            fast_particles,
+            self.tokenizer,
+            c,
+            config.alpha_star,
+            use_source_weight=config.use_source_weight,
         )
         fast_diag["vote_info"] = vote_info
+
+        if fast_diag.get("budget_exhausted", False):
+            # Keep pass_type orthogonal to budget status for audit compatibility.
+            fast_diag["pass_type"] = "fast"
+            return fast_particles, best_answer, best_particle, fast_diag
         
         # Check if fast pass succeeded
         mass_top = vote_info.get("best_mass", 0.0)
@@ -1146,9 +1244,10 @@ class ASMCSampler:
         # Hard pass needed
         if verbose:
             print(f"Fast pass insufficient: mass_top={mass_top:.2f} < {config.fast_mass_threshold}")
-            print("=== Hard Pass (N=96) ===")
+            print(f"=== Hard Pass (N={config.hard_n_particles}) ===")
         
         hard_config = ASMCConfig(
+            c_int_cap=config.c_int_cap,
             n_particles=config.hard_n_particles,
             alpha_star=config.alpha_star,
             block_size=config.block_size,
@@ -1158,29 +1257,41 @@ class ASMCSampler:
             anneal_tokens=config.hard_anneal_tokens,
             alpha_start=config.hard_alpha_start,
             anneal_schedule=config.anneal_schedule,
+            use_source_weight=config.use_source_weight,
             # Early stop settings (more conservative for hard pass)
             early_stop_mass_threshold=config.hard_early_stop_mass_threshold,
             early_stop_min_tokens=config.hard_early_stop_min_tokens,
             early_stop_ess_frac=config.hard_early_stop_ess_frac,
             early_stop_min_parsed_frac=config.hard_early_stop_min_parsed_frac,
             early_stop_stable_checks=config.early_stop_stable_checks,
-            # EOS control (more conservative for hard pass)
+            # Historical EOS control (more conservative for hard pass)
+            legacy_stop_constraints=config.legacy_stop_constraints,
             min_eos_tokens=config.hard_min_eos_tokens,
             prefer_non_eos_until=config.hard_prefer_non_eos_until,
             eos_penalty=config.hard_eos_penalty,
             stop_token_ids=config.stop_token_ids,  # Share stop tokens
-            enable_rejuvenation=True,  # Enable rejuv in hard pass
+            enable_rejuvenation=config.enable_rejuvenation,
             rejuvenation_fraction=config.rejuvenation_fraction,
             rejuvenation_window=config.rejuvenation_window,
             enable_adaptive=False,
         )
         
         hard_particles, hard_diag = asmc_sample(
-            self.model, self.tokenizer, context, hard_config, self.device, verbose
+            self.model,
+            self.tokenizer,
+            context,
+            hard_config,
+            self.device,
+            verbose,
+            tracker=tracker,
         )
         
         best_answer, best_particle, vote_info = weighted_voting_output(
-            hard_particles, self.tokenizer, c, config.alpha_star
+            hard_particles,
+            self.tokenizer,
+            c,
+            config.alpha_star,
+            use_source_weight=config.use_source_weight,
         )
         hard_diag["vote_info"] = vote_info
         hard_diag["fast_diag"] = fast_diag  # Include fast pass diagnostics
@@ -1198,6 +1309,7 @@ def asmc_single_sample(
     device,
     config: Optional[ASMCConfig] = None,
     verbose: bool = False,
+    tracker=None,
 ) -> Tuple[List[int], str, Dict[str, Any]]:
     """
     Run ASMC and return a single best sequence.
@@ -1213,7 +1325,7 @@ def asmc_single_sample(
         config = ASMCConfig()
     
     particles, best_answer, best_particle, diagnostics = sampler.sample(
-        context, config, verbose
+        context, config, verbose, tracker=tracker
     )
     
     return best_particle.tokens, best_answer, diagnostics

@@ -18,7 +18,19 @@ from contextlib import contextmanager
 from typing import Optional, Callable, Any
 from functools import wraps
 
-from compute_tracker import ComputeTracker, get_global_tracker
+try:  # Package import (``import ASMC.compute_instrumentation``)
+    from .compute_tracker import ComputeTracker, get_global_tracker
+except ImportError:  # Script import (``python ASMC/asmc_full_comparison.py``)
+    from compute_tracker import ComputeTracker, get_global_tracker
+
+
+def _synchronize_visible_cuda_devices() -> None:
+    """Synchronize every visible CUDA device used by a possible device map."""
+
+    if not torch.cuda.is_available():
+        return
+    for device_index in range(torch.cuda.device_count()):
+        torch.cuda.synchronize(device_index)
 
 
 def _get_batch_size_and_seq_len(input_ids: Optional[torch.Tensor], 
@@ -62,9 +74,9 @@ def _get_past_len(past_key_values) -> int:
     # past_key_values[layer_idx] = (key, value)
     # key shape: [batch, num_heads, seq_len, head_dim]
     try:
-        if isinstance(past_key_values, tuple) and len(past_key_values) > 0:
+        if isinstance(past_key_values, (tuple, list)) and len(past_key_values) > 0:
             first_layer = past_key_values[0]
-            if isinstance(first_layer, tuple) and len(first_layer) >= 1:
+            if isinstance(first_layer, (tuple, list)) and len(first_layer) >= 1:
                 key_tensor = first_layer[0]
                 if hasattr(key_tensor, 'shape') and len(key_tensor.shape) >= 3:
                     return key_tensor.shape[2]  # seq_len dimension
@@ -94,6 +106,7 @@ def create_wrapped_forward(original_forward: Callable,
         input_ids = None
         inputs_embeds = None
         past_key_values = None
+        attention_mask = kwargs.get('attention_mask')
         
         # Check kwargs first (more common in modern usage)
         if 'input_ids' in kwargs:
@@ -111,20 +124,49 @@ def create_wrapped_forward(original_forward: Callable,
         batch_size, seq_len = _get_batch_size_and_seq_len(input_ids, inputs_embeds)
         past_len = _get_past_len(past_key_values)
         
+        # Commit algorithmic accounting only after a successful forward.  OOM
+        # fallback paths may retry with a smaller batch; counting the failed
+        # attempt as a complete call would make C_int depend on hardware and the
+        # initial micro-batch size.  End-to-end timing still includes retries.
+        result = original_forward(*args, **kwargs)
+
         # Log compute cost
         if past_key_values is None or past_len == 0:
             # Prefill: no KV cache, processing fresh sequence
-            # Cost: O(B * S^2)
+            # Cost: B * S * (S + 1) / 2.
             if seq_len > 0:
-                tracker.log_prefill(batch_size, seq_len)
+                effective_lens = None
+                if (
+                    attention_mask is not None
+                    and getattr(attention_mask, "ndim", 0) >= 2
+                    and attention_mask.shape[0] == batch_size
+                    and attention_mask.shape[-1] == seq_len
+                ):
+                    effective_lens = attention_mask.sum(dim=-1)
+                tracker.log_prefill(
+                    batch_size, seq_len, effective_lens=effective_lens
+                )
         else:
-            # Decode: using KV cache, typically generating 1 token at a time
-            # Cost: O(B * (past_len + seq_len))
+            # Cached forward: each of S query tokens attends to its cached
+            # prefix and preceding query tokens.
             total_len = past_len + seq_len
-            tracker.log_decode(batch_size, total_len)
+            effective_lens = None
+            if (
+                attention_mask is not None
+                and getattr(attention_mask, "ndim", 0) >= 2
+                and attention_mask.shape[0] == batch_size
+                and attention_mask.shape[-1] == total_len
+            ):
+                effective_lens = attention_mask.sum(dim=-1)
+            tracker.log_decode(
+                batch_size,
+                total_len,
+                step_tokens=seq_len,
+                past_len=past_len,
+                effective_lens=effective_lens,
+            )
         
-        # Call original forward
-        return original_forward(*args, **kwargs)
+        return result
     
     return wrapped_forward
 
@@ -164,8 +206,8 @@ def instrument_model(model: torch.nn.Module,
     
     # CUDA sync helper
     def sync():
-        if sync_cuda and torch.cuda.is_available():
-            torch.cuda.synchronize()
+        if sync_cuda:
+            _synchronize_visible_cuda_devices()
     
     try:
         # Replace forward
@@ -221,8 +263,8 @@ class ModelInstrumenter:
             self._original_forward, self._tracker, self.sync_cuda
         )
         
-        if self.sync_cuda and torch.cuda.is_available():
-            torch.cuda.synchronize()
+        if self.sync_cuda:
+            _synchronize_visible_cuda_devices()
         self._tracker.start_timer()
         
         self._is_tracking = True
@@ -233,8 +275,8 @@ class ModelInstrumenter:
         if not self._is_tracking:
             raise RuntimeError("Not tracking. Call start() first.")
         
-        if self.sync_cuda and torch.cuda.is_available():
-            torch.cuda.synchronize()
+        if self.sync_cuda:
+            _synchronize_visible_cuda_devices()
         self._tracker.stop_timer()
         
         self.model.forward = self._original_forward

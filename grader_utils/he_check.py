@@ -10,7 +10,10 @@ import json
 import os
 
 
-from grader_utils.he_execute import check_correctness
+try:  # Package import
+    from .he_execute import check_correctness
+except ImportError:  # Direct script execution
+    from grader_utils.he_execute import check_correctness
 
 
 def read_problems(evalset_file: str = "./HumanEval.jsonl") -> Dict[str, Dict]:

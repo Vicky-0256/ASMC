@@ -1,7 +1,10 @@
 import textwrap
 import json
 import re
-from grader_utils.he_check import evaluate_functional_correctness
+try:  # Package import
+    from .he_check import evaluate_functional_correctness
+except ImportError:  # Direct script execution
+    from grader_utils.he_check import evaluate_functional_correctness
 
 
 
@@ -41,5 +44,4 @@ def entry_point(
     k = list(map(int, k.split(",")))
     results = evaluate_functional_correctness(sample_file, k, n_workers, timeout, problem_file)
     print(results)
-
 

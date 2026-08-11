@@ -1,4 +1,4 @@
-# Python
+# Python bytecode and build products
 __pycache__/
 *.py[cod]
 *$py.class
@@ -9,29 +9,73 @@ __pycache__/
 dist/
 build/
 
-# Results and outputs
-results/*.csv
-results/*.json
-results/*.out
-results/*.err
-results/**/*.csv
-results/**/*.json
+# Test, type-checker, and coverage caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
 
-# Environment
+# Local environments and package-manager state
 .env
-.venv
+.env.*
+!.env.example
+.venv/
 env/
 venv/
+conda-meta/
 
-# IDE
+# Experiment outputs and scheduler logs
+results/**
+!results/
+!results/README.md
+!results/paper/
+!results/paper/README.md
+!results/paper/summary.csv
+!results/paper/*.summary.json
+!results/paper/compute_matched.json
+!results/paper/compute_matched.csv
+!results/paper/table_compute_matched.tex
+!results/paper/table_compute_matched.md
+!results/paper/table_compute_matched.manifest.json
+logs/
+*.out
+*.err
+slurm-*.out
+slurm-*.err
+
+# Model, dataset, and framework caches
+.cache/
+huggingface/
+wandb/
+lightning_logs/
+checkpoints/
+*.ckpt
+*.pt
+*.pth
+*.safetensors
+
+# Local agent/tool state
+.agents/
+.claude/
+.codex/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Editor and OS state
 .idea/
 .vscode/
 *.swp
 *.swo
-
-# Jupyter
-.ipynb_checkpoints/
-
-# OS
+*~
 .DS_Store
 Thumbs.db
+
+# Ad-hoc backup copies are not release entry points
+* copy.py
+* copy [0-9].py
+*.bak

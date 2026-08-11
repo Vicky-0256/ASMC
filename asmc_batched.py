@@ -21,16 +21,30 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 
-from asmc_sampler import (
-    ASMCConfig, Particle,
-    compute_annealing_alpha,
-    compute_power_proposal_logprobs,
-    systematic_resample,
-    compute_ess_from_logw,
-    normalize_logweights,
-    compute_answer_masses,
-    weighted_voting_output,
-)
+try:  # Package import
+    from .asmc_sampler import (
+        ASMCConfig, Particle,
+        compute_annealing_alpha,
+        compute_power_proposal_logprobs,
+        systematic_resample,
+        compute_ess_from_logw,
+        normalize_logweights,
+        compute_answer_masses,
+        build_stop_token_ids,
+        weighted_voting_output,
+    )
+except ImportError:  # Direct script execution from the repository root
+    from asmc_sampler import (
+        ASMCConfig, Particle,
+        compute_annealing_alpha,
+        compute_power_proposal_logprobs,
+        systematic_resample,
+        compute_ess_from_logw,
+        normalize_logweights,
+        compute_answer_masses,
+        build_stop_token_ids,
+        weighted_voting_output,
+    )
 
 
 def ensure_pad_token(tokenizer):
@@ -79,7 +93,13 @@ def reorder_past_key_values(past_key_values, indices, device=None):
     # past_key_values[layer] = (k, v) with k/v shaped [N, n_kv_heads, T, head_dim]
     new_pkv = []
     for (k, v) in past_key_values:
-        new_pkv.append((k.index_select(0, indices), v.index_select(0, indices)))
+        # ``device_map=auto`` can place legacy-cache layers on different
+        # devices.  index_select requires its indices on the tensor's device.
+        k_indices = indices.to(device=k.device)
+        v_indices = indices.to(device=v.device)
+        new_pkv.append(
+            (k.index_select(0, k_indices), v.index_select(0, v_indices))
+        )
     return tuple(new_pkv)
 
 
@@ -169,6 +189,7 @@ def batched_asmc_sample(
     device,
     verbose: bool = False,
     debug_verify_cache: bool = False,
+    tracker=None,
 ) -> Tuple[List[Particle], Dict[str, Any]]:
     """
     Run batched ASMC sampling with KV cache optimization.
@@ -182,11 +203,22 @@ def batched_asmc_sample(
         config: ASMC configuration
         device: Compute device
         verbose: Print progress
+        tracker: ComputeTracker used by model instrumentation. Required when
+            ``config.c_int_cap`` is set. The cap is checked after a generated
+            token update, allowing at most one-forward C_int overshoot.
     
     Returns:
         particles: Final list of particles
         diagnostics: Dictionary with diagnostics info
     """
+    if config.c_int_cap is not None and tracker is None:
+        raise ValueError("tracker is required when c_int_cap is specified")
+    if config.c_int_cap is not None and debug_verify_cache:
+        raise ValueError(
+            "debug_verify_cache cannot be combined with c_int_cap because "
+            "diagnostic forwards would consume the publication budget"
+        )
+
     N = config.n_particles
     c = len(context)
     max_len = c + config.max_new_tokens
@@ -194,10 +226,13 @@ def batched_asmc_sample(
     # Ensure pad token exists
     pad_token_id = ensure_pad_token(tokenizer)
     
-    # Build stop token IDs if not already set
+    # Build termination token IDs. Historical ASMC-only masking of every
+    # special token is opt-in because it changes the target distribution.
     if config.stop_token_ids is None:
-        from asmc_sampler import build_stop_token_ids
-        config.stop_token_ids = build_stop_token_ids(tokenizer)
+        config.stop_token_ids = build_stop_token_ids(
+            tokenizer,
+            include_all_special=config.legacy_stop_constraints,
+        )
     
     # Initialize particles - all start with same context
     particles = [
@@ -226,10 +261,19 @@ def batched_asmc_sample(
         "n_parsed_blocks": [],  # Track parsed answers per block
         "ess_blocks": [],  # ESS at each block boundary
         "stop_reason": None,  # early_stop / max_len / all_finished / error
+        "c_int_cap": config.c_int_cap,
+        "budget_exhausted": False,
+        "budget_exhausted_at_token": None,
         "gen_len_best": 0,  # Length of best particle completion
         "non_special_len_best": 0,  # Non-special token length
     }
     
+    if config.c_int_cap is not None and tracker.C_int >= config.c_int_cap:
+        diagnostics["budget_exhausted"] = True
+        diagnostics["budget_exhausted_at_token"] = -1
+        diagnostics["stop_reason"] = "budget_exhausted"
+        return particles, diagnostics
+
     # Initial batched forward pass to get KV cache
     # All particles start with the same context
     input_ids = torch.tensor([context], dtype=torch.long, device=device)
@@ -243,9 +287,8 @@ def batched_asmc_sample(
     past_key_values = outputs.past_key_values
     logits = outputs.logits[:, -1, :].clone()  # (N, vocab_size) - clone to avoid modifying cache
     
-    # 🔴 CRITICAL: Apply EOS mask to FIRST logits too (t_gen=0)!
-    # Otherwise first token can be EOS (Problem 94 root cause)
-    if config.stop_token_ids:
+    # Reproduce the historical minimum-length constraint only when requested.
+    if config.legacy_stop_constraints and config.stop_token_ids:
         for stop_id in config.stop_token_ids:
             logits[:, stop_id] = -1e30  # Always hard mask at t=0
     
@@ -258,6 +301,7 @@ def batched_asmc_sample(
     for t_gen in range(config.max_new_tokens):
         # Reset resampled flag at start of each iteration
         resampled_this_block = False
+        resample_indices = None
         
         # Compute annealing alpha
         alpha_t = compute_annealing_alpha(
@@ -272,7 +316,7 @@ def batched_asmc_sample(
         
         # 🔴 CRITICAL FIX: Mask/penalize stop tokens BEFORE computing proposal
         # This prevents the clamp bug from resurrecting masked tokens
-        if config.stop_token_ids:
+        if config.legacy_stop_constraints and config.stop_token_ids:
             if t_gen < config.min_eos_tokens:
                 # Hard mask: set to very negative value
                 for stop_id in config.stop_token_ids:
@@ -334,12 +378,30 @@ def batched_asmc_sample(
         # Accumulate EOS count for this block
         n_eos_this_block += n_eos_this_step
         diagnostics["tokens_generated"] = t_gen + 1
+
+        # The logits used above came from exactly one batched model forward.
+        # Checking after consuming them bounds cap overshoot by that last
+        # forward while preserving a complete particle-population token step.
+        if (
+            config.c_int_cap is not None
+            and tracker.C_int >= config.c_int_cap
+        ):
+            diagnostics["budget_exhausted"] = True
+            diagnostics["budget_exhausted_at_token"] = t_gen
+            diagnostics["stop_reason"] = "budget_exhausted"
+            if verbose:
+                print(
+                    f"  Budget exhausted at t={t_gen}: "
+                    f"C_int={tracker.C_int:,} >= cap={config.c_int_cap:,}"
+                )
+            break
         
         # Block-wise ESS evaluation and resampling
         if (t_gen + 1) % config.block_size == 0 or t_gen == config.max_new_tokens - 1:
             # Compute ESS
             logw = [p.log_weight for p in particles]
             ess = compute_ess_from_logw(logw)
+            ess_for_early_stop = ess
             diagnostics["ess_history"].append(ess)
             diagnostics["ess_blocks"].append(ess)
             
@@ -366,7 +428,12 @@ def batched_asmc_sample(
             n_parsed = 0
             source_counts = {}
             try:
-                answer_masses, n_parsed, source_counts = compute_answer_masses(particles, tokenizer, c)
+                answer_masses, n_parsed, source_counts = compute_answer_masses(
+                    particles,
+                    tokenizer,
+                    c,
+                    use_source_weight=config.use_source_weight,
+                )
             except Exception:
                 pass
             diagnostics["n_parsed_blocks"].append(n_parsed)
@@ -388,6 +455,7 @@ def batched_asmc_sample(
 
                 # Systematic resampling
                 indices = systematic_resample(weights, N)
+                resample_indices = indices
 
                 # ===== DIAGNOSTIC: Track unique ancestors after resampling =====
                 unique_ancestors = len(set(indices))
@@ -418,62 +486,31 @@ def batched_asmc_sample(
                 
                 # Recompute answer masses after resampling
                 try:
-                    answer_masses, n_parsed, source_counts = compute_answer_masses(particles, tokenizer, c)
+                    answer_masses, n_parsed, source_counts = compute_answer_masses(
+                        particles,
+                        tokenizer,
+                        c,
+                        use_source_weight=config.use_source_weight,
+                    )
                 except Exception:
                     answer_masses = {}
                     n_parsed = 0
                     source_counts = {}
                 
-                # Reorder KV cache after resampling (O(1) instead of full rebuild)
-                if active_mask.any():
-                    # Use efficient KV cache reorder instead of expensive full forward pass
-                    past_key_values = reorder_past_key_values(past_key_values, indices, device=device)
-                    
-                    # CRITICAL: Get the last token from reordered particles, NOT from next_tokens
-                    # This is because particles have already been reordered, and each particle's
-                    # last token corresponds to its own sequence, not the original next_tokens order.
-                    last_tokens = torch.tensor(
-                        [p.tokens[-1] for p in particles],
-                        dtype=torch.long, device=device
-                    )
-                    
-                    # Prepare input for incremental update
-                    next_input = last_tokens.unsqueeze(1)  # (N, 1)
-                    
-                    # For inactive particles (finished), use pad token
-                    next_input = torch.where(
-                        active_mask.unsqueeze(1),
-                        next_input,
-                        torch.full_like(next_input, pad_token_id)
-                    )
-                    
-                    outputs = model(
-                        next_input,
-                        past_key_values=past_key_values,
-                        use_cache=True
-                    )
-                    past_key_values = outputs.past_key_values
-                    logits = outputs.logits[:, -1, :].clone()
-                    
-                    # Debug verification: check cache alignment (expensive, only for debugging)
-                    if debug_verify_cache:
-                        verify_kv_cache_alignment(model, particles, past_key_values, logits, device)
-                        if verbose:
-                            print(f"    [DEBUG] KV cache alignment verified ✓")
-                    
-                    # Note: KV cache now synced, skip incremental update at end of loop
-                    # Fall through to early-stop check first
-            
             # ====== STEP 2: EARLY-STOP CHECK (only if ESS is healthy) ======
             # CRITICAL: Only allow early-stop if ESS >= threshold (prevents single-particle domination)
-            if t_gen >= config.early_stop_min_tokens:
+            if t_gen + 1 >= config.early_stop_min_tokens:
                 ess_threshold_for_stop = config.early_stop_ess_frac * N
                 parsed_threshold_for_stop = config.early_stop_min_parsed_frac * N
                 
                 # Gate 1: ESS must be healthy
-                if ess < ess_threshold_for_stop:
+                if ess_for_early_stop < ess_threshold_for_stop:
                     if verbose:
-                        print(f"  Early-stop blocked: ESS={ess:.2f} < {ess_threshold_for_stop:.1f}")
+                        print(
+                            "  Early-stop blocked: pre-resampling "
+                            f"ESS={ess_for_early_stop:.2f} < "
+                            f"{ess_threshold_for_stop:.1f}"
+                        )
                 # Gate 2: Enough particles must have parsed answers
                 elif n_parsed < parsed_threshold_for_stop:
                     if verbose:
@@ -501,14 +538,71 @@ def batched_asmc_sample(
                             diagnostics["early_stop_token"] = t_gen
                             diagnostics["stop_reason"] = "early_stop"
                             if verbose:
-                                print(f"  Early stop at t={t_gen}: mass={top_mass:.2f}, ESS={ess:.2f}, stable={stable_count}")
+                                print(
+                                    f"  Early stop at t={t_gen}: "
+                                    f"mass={top_mass:.2f}, "
+                                    f"pre-resampling ESS={ess_for_early_stop:.2f}, "
+                                    f"stable={stable_count}"
+                                )
                             break
                         else:
                             if verbose:
                                 print(f"  Early-stop pending: mass={top_mass:.2f} but stable_count={stable_count} < {config.early_stop_stable_checks}")
+
+            # Only prepare the next-token cache after deciding that this
+            # block will continue.  If resampling is immediately followed by
+            # early stop, advancing the cache would be unused work and could
+            # incorrectly turn the outcome into budget exhaustion.
+            if (
+                resampled_this_block
+                and active_mask.any()
+                and t_gen + 1 < config.max_new_tokens
+            ):
+                past_key_values = reorder_past_key_values(
+                    past_key_values,
+                    resample_indices,
+                    device=device,
+                )
+
+                # Particles have already been reordered; use their own last
+                # tokens rather than the pre-resampling next_tokens tensor.
+                last_tokens = torch.tensor(
+                    [p.tokens[-1] for p in particles],
+                    dtype=torch.long,
+                    device=device,
+                )
+                next_input = last_tokens.unsqueeze(1)
+                next_input = torch.where(
+                    active_mask.unsqueeze(1),
+                    next_input,
+                    torch.full_like(next_input, pad_token_id),
+                )
+
+                outputs = model(
+                    next_input,
+                    past_key_values=past_key_values,
+                    use_cache=True,
+                )
+                past_key_values = outputs.past_key_values
+                logits = outputs.logits[:, -1, :].clone()
+
+                if debug_verify_cache:
+                    verify_kv_cache_alignment(
+                        model,
+                        particles,
+                        past_key_values,
+                        logits,
+                        device,
+                    )
+                    if verbose:
+                        print("    [DEBUG] KV cache alignment verified ✓")
         
         # Incremental KV cache update (skip if we just rebuilt KV cache after resampling)
-        if active_mask.any() and not resampled_this_block:
+        if (
+            active_mask.any()
+            and not resampled_this_block
+            and t_gen + 1 < config.max_new_tokens
+        ):
             # Prepare next input (just the new tokens)
             next_input = next_tokens.unsqueeze(1)  # (N, 1)
             
@@ -567,6 +661,7 @@ class BatchedASMCSampler:
         config: Optional[ASMCConfig] = None,
         verbose: bool = False,
         debug_verify_cache: bool = False,
+        tracker=None,
     ) -> Tuple[List[Particle], str, 'Particle', Dict[str, Any]]:
         """
         Run batched ASMC sampling with optional adaptive budget.
@@ -576,6 +671,7 @@ class BatchedASMCSampler:
             config: ASMC configuration
             verbose: Print progress
             debug_verify_cache: If True, verify KV cache alignment after each resample
+            tracker: Shared ComputeTracker used for optional C_int enforcement
         """
         if config is None:
             config = ASMCConfig()
@@ -586,10 +682,15 @@ class BatchedASMCSampler:
             # Single pass
             particles, diagnostics = batched_asmc_sample(
                 self.model, self.tokenizer, context, config, self.device, verbose,
-                debug_verify_cache=debug_verify_cache
+                debug_verify_cache=debug_verify_cache,
+                tracker=tracker,
             )
             best_answer, best_particle, vote_info = weighted_voting_output(
-                particles, self.tokenizer, c, config.alpha_star
+                particles,
+                self.tokenizer,
+                c,
+                config.alpha_star,
+                use_source_weight=config.use_source_weight,
             )
             diagnostics["vote_info"] = vote_info
             return particles, best_answer, best_particle, diagnostics
@@ -597,11 +698,14 @@ class BatchedASMCSampler:
         # Adaptive: Fast pass first
         # Build stop_token_ids if not already set on parent config
         if config.stop_token_ids is None:
-            from asmc_sampler import build_stop_token_ids
-            config.stop_token_ids = build_stop_token_ids(self.tokenizer)
+            config.stop_token_ids = build_stop_token_ids(
+                self.tokenizer,
+                include_all_special=config.legacy_stop_constraints,
+            )
         
         fast_config = ASMCConfig(
-            n_particles=32,
+            c_int_cap=config.c_int_cap,
+            n_particles=config.fast_n_particles,
             alpha_star=config.alpha_star,
             block_size=config.block_size,
             max_new_tokens=config.max_new_tokens,
@@ -610,13 +714,15 @@ class BatchedASMCSampler:
             anneal_tokens=config.anneal_tokens,
             alpha_start=config.alpha_start,
             anneal_schedule=config.anneal_schedule,
+            use_source_weight=config.use_source_weight,
             # Early stop settings (with new gates)
             early_stop_mass_threshold=config.early_stop_mass_threshold,
             early_stop_min_tokens=config.early_stop_min_tokens,
             early_stop_ess_frac=config.early_stop_ess_frac,
             early_stop_min_parsed_frac=config.early_stop_min_parsed_frac,
             early_stop_stable_checks=config.early_stop_stable_checks,
-            # EOS control (CRITICAL for Problem 94 fix)
+            # Historical EOS control
+            legacy_stop_constraints=config.legacy_stop_constraints,
             min_eos_tokens=config.min_eos_tokens,
             prefer_non_eos_until=config.prefer_non_eos_until,
             eos_penalty=config.eos_penalty,
@@ -626,17 +732,27 @@ class BatchedASMCSampler:
         )
         
         if verbose:
-            print("=== Fast Pass (N=32) ===")
+            print(f"=== Fast Pass (N={config.fast_n_particles}) ===")
         
         fast_particles, fast_diag = batched_asmc_sample(
             self.model, self.tokenizer, context, fast_config, self.device, verbose,
-            debug_verify_cache=debug_verify_cache
+            debug_verify_cache=debug_verify_cache,
+            tracker=tracker,
         )
         
         best_answer, best_particle, vote_info = weighted_voting_output(
-            fast_particles, self.tokenizer, c, config.alpha_star
+            fast_particles,
+            self.tokenizer,
+            c,
+            config.alpha_star,
+            use_source_weight=config.use_source_weight,
         )
         fast_diag["vote_info"] = vote_info
+
+        if fast_diag.get("budget_exhausted", False):
+            # Keep pass type orthogonal to budget status for audit compatibility.
+            fast_diag["pass_type"] = "fast"
+            return fast_particles, best_answer, best_particle, fast_diag
         
         # Check if fast pass succeeded
         mass_top = vote_info.get("best_mass", 0.0)
@@ -650,9 +766,10 @@ class BatchedASMCSampler:
         # Hard pass needed
         if verbose:
             print(f"Fast pass insufficient: mass_top={mass_top:.2f} < {config.fast_mass_threshold}")
-            print("=== Hard Pass (N=96) ===")
+            print(f"=== Hard Pass (N={config.hard_n_particles}) ===")
         
         hard_config = ASMCConfig(
+            c_int_cap=config.c_int_cap,
             n_particles=config.hard_n_particles,
             alpha_star=config.alpha_star,
             block_size=config.block_size,
@@ -662,13 +779,15 @@ class BatchedASMCSampler:
             anneal_tokens=config.hard_anneal_tokens,
             alpha_start=config.hard_alpha_start,
             anneal_schedule=config.anneal_schedule,
+            use_source_weight=config.use_source_weight,
             # Early stop settings (more conservative for hard pass)
             early_stop_mass_threshold=config.hard_early_stop_mass_threshold,
             early_stop_min_tokens=config.hard_early_stop_min_tokens,
             early_stop_ess_frac=config.hard_early_stop_ess_frac,
             early_stop_min_parsed_frac=config.hard_early_stop_min_parsed_frac,
             early_stop_stable_checks=config.early_stop_stable_checks,
-            # EOS control for hard pass (more conservative settings)
+            # Historical EOS control for hard pass
+            legacy_stop_constraints=config.legacy_stop_constraints,
             min_eos_tokens=config.hard_min_eos_tokens,
             prefer_non_eos_until=config.hard_prefer_non_eos_until,
             eos_penalty=config.hard_eos_penalty,
@@ -679,11 +798,16 @@ class BatchedASMCSampler:
         
         hard_particles, hard_diag = batched_asmc_sample(
             self.model, self.tokenizer, context, hard_config, self.device, verbose,
-            debug_verify_cache=debug_verify_cache
+            debug_verify_cache=debug_verify_cache,
+            tracker=tracker,
         )
         
         best_answer, best_particle, vote_info = weighted_voting_output(
-            hard_particles, self.tokenizer, c, config.alpha_star
+            hard_particles,
+            self.tokenizer,
+            c,
+            config.alpha_star,
+            use_source_weight=config.use_source_weight,
         )
         hard_diag["vote_info"] = vote_info
         hard_diag["fast_diag"] = fast_diag
@@ -700,6 +824,7 @@ def asmc_generate_batch(
     config: ASMCConfig,
     device,
     verbose: bool = False,
+    tracker=None,
 ) -> Tuple[List[int], str, Dict[str, Any]]:
     """
     Convenience function for single-sequence output.
@@ -712,7 +837,7 @@ def asmc_generate_batch(
     sampler = BatchedASMCSampler(model, tokenizer, device)
     
     particles, best_answer, best_particle, diagnostics = sampler.sample(
-        context, config, verbose
+        context, config, verbose, tracker=tracker
     )
     
     return best_particle.tokens, best_answer, diagnostics

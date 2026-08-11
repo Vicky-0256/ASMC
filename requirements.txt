@@ -1,0 +1,22 @@
+# Compatibility ranges for the pre-release code. These are not a lockfile.
+# The corrected paper-result environment will be recorded separately with exact
+# package versions, CUDA/driver versions, model revisions, and hardware.
+torch>=2.4,<3
+# Pinned because the cache-coherent path is regression-tested against this
+# Qwen2 cache API.  Broader Transformers versions should be validated before
+# relaxing the pin.
+transformers==4.46.3
+accelerate>=0.30,<2
+numpy>=1.24,<3
+pandas>=2.0,<3
+tqdm>=4.66,<5
+sympy>=1.12,<2
+pylatexenc>=2.10,<3
+safetensors>=0.4,<1
+
+# Lightweight release-validation suite.
+pytest>=7.4,<9
+
+# The current runner selects FlashAttention 2. Install a version compatible
+# with the local PyTorch/CUDA stack after installing this file, commonly with:
+#   python -m pip install "flash-attn>=2.6,<3" --no-build-isolation
