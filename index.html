@@ -85,6 +85,15 @@
         <p>Recent work shows that chain based sampling for power shaped trajectory distributions can deliver large test time gains from a fixed base LLM and can approach RL trained reasoners such as GRPO without additional training. Deployment is the bottleneck. Autoregressive Metropolis Hastings is inherently serial, limits GPU utilization, and exhibits extreme tail latency at high budgets. We propose Adaptive Sequential Monte Carlo (ASMC), a parallel particle inference method that targets power shaped trajectory distributions while adapting particle populations to problem hardness. To make resampling practical for Transformers, we introduce cache coherent resampling, which realizes ancestry updates by reordering KV caches and other particle bound tensors, avoiding prefix recomputation. On MATH500 at the same budget, ASMC attains 80.6% exact-match accuracy with p95 = 73.7s, substantially reducing the tail latency of sequential MCMC and providing additional high-accuracy operating points beyond the saturation of best-of-n. We further analyze particle degeneracy and find that collapse severity, measured by low ESS_min/N, strongly predicts failures, while sensitivity to the resampling scheme is limited.</p>
         <p class="links"><a href="/ASMC/paper.pdf">Paper PDF</a><a href="https://openreview.net/pdf?id=JN6wxUGmW8">OpenReview</a><a href="/ASMC/paper/">Static paper page</a><a href="https://github.com/Vicky-0256/ASMC">Code</a><a href="/ASMC/#cite">BibTeX</a></p>
         <aside class="status"><strong>Artifact status.</strong> The corrected public ASMC implementation and CPU tests are available. A corrected, audited 500-problem GPU rerun is pending. See <a href="https://github.com/Vicky-0256/ASMC/blob/main/docs/result_integrity.md">Result Integrity</a> and <a href="https://github.com/Vicky-0256/ASMC/blob/main/docs/reproducibility.md">Reproducibility</a> for the exact evidence boundary.</aside>
+        <section>
+          <h2>Citation</h2>
+          <pre>@inproceedings{wang2026cache,
+  title     = {Cache Coherent Resampling for Efficient Test Time Scaling in LLM Reasoning via Adaptive Sequential Monte Carlo},
+  author    = {Wang, Ke and Yu, Zehao and Wang, Luwei and Huang, Yongchao},
+  booktitle = {Forty-third International Conference on Machine Learning},
+  year      = {2026}
+}</pre>
+        </section>
       </article>
     </div>
     <script type="module" src="/src/main.jsx"></script>
