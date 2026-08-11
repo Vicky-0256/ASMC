@@ -10,6 +10,18 @@ via Adaptive Sequential Monte Carlo**
 [Paper](https://openreview.net/pdf?id=JN6wxUGmW8) · [Project Page](https://vicky-0256.github.io/ASMC/) ·
 [Citation](CITATION.cff)
 
+> **Artifact status**
+>
+> This page reports the ICML 2026 camera-ready results. The corrected public
+> ASMC implementation and CPU tests are available. A corrected, audited
+> 500-problem GPU rerun is pending. See [Result Integrity](docs/result_integrity.md)
+> and [Reproducibility](docs/reproducibility.md) for the exact evidence boundary.
+>
+> Numerical claims are labeled `Paper-reported result` or
+> `Artifact-verified result`. After the corrected rerun, the label will become
+> `Reproduced by public artifact` and include the configuration, commit,
+> summary JSON, and release DOI.
+
 ---
 
 ## What is ASMC?
