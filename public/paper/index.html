@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Cache Coherent Resampling for Efficient Test Time Scaling in LLM Reasoning via Adaptive Sequential Monte Carlo | ICML 2026</title>
+    <meta name="description" content="Paper landing page for Cache Coherent Resampling for Efficient Test Time Scaling in LLM Reasoning via Adaptive Sequential Monte Carlo (ICML 2026).">
+    <meta name="keywords" content="sequence-level power sampling, adaptive sequential Monte Carlo, cache-coherent resampling, LLM reasoning, test-time scaling, KV cache">
+    <link rel="canonical" href="https://vicky-0256.github.io/ASMC/paper/">
+    <meta name="citation_title" content="Cache Coherent Resampling for Efficient Test Time Scaling in LLM Reasoning via Adaptive Sequential Monte Carlo">
+    <meta name="citation_author" content="Ke Wang">
+    <meta name="citation_author" content="Zehao Yu">
+    <meta name="citation_author" content="Luwei Wang">
+    <meta name="citation_author" content="Yongchao Huang">
+    <meta name="citation_publication_date" content="2026">
+    <meta name="citation_conference_title" content="Forty-third International Conference on Machine Learning">
+    <meta name="citation_pdf_url" content="https://vicky-0256.github.io/ASMC/paper.pdf">
+    <meta name="citation_fulltext_html_url" content="https://vicky-0256.github.io/ASMC/paper/">
+    <meta property="og:type" content="article">
+    <meta property="og:site_name" content="Cache-Coherent ASMC">
+    <meta property="og:url" content="https://vicky-0256.github.io/ASMC/paper/">
+    <meta property="og:title" content="Cache-Coherent ASMC — ICML 2026">
+    <meta property="og:description" content="Adaptive Sequential Monte Carlo for sequence-level power sampling and cache-coherent KV-state resampling in LLM reasoning.">
+    <meta property="og:image" content="https://vicky-0256.github.io/ASMC/og-card.png">
+    <meta property="og:image:alt" content="Cache-Coherent ASMC for sequence-level power sampling in LLM reasoning">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Cache-Coherent ASMC — ICML 2026">
+    <meta name="twitter:description" content="Adaptive Sequential Monte Carlo for sequence-level power sampling and cache-coherent KV-state resampling in LLM reasoning.">
+    <meta name="twitter:image" content="https://vicky-0256.github.io/ASMC/og-card.png">
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "ScholarlyArticle",
+        "@id": "https://vicky-0256.github.io/ASMC/paper/#article",
+        "url": "https://vicky-0256.github.io/ASMC/paper/",
+        "name": "Cache Coherent Resampling for Efficient Test Time Scaling in LLM Reasoning via Adaptive Sequential Monte Carlo",
+        "headline": "Cache Coherent Resampling for Efficient Test Time Scaling in LLM Reasoning via Adaptive Sequential Monte Carlo",
+        "author": [
+          { "@type": "Person", "name": "Ke Wang" },
+          { "@type": "Person", "name": "Zehao Yu" },
+          { "@type": "Person", "name": "Luwei Wang" },
+          { "@type": "Person", "name": "Yongchao Huang" }
+        ],
+        "datePublished": "2026",
+        "isPartOf": {
+          "@type": "PublicationIssue",
+          "name": "Forty-third International Conference on Machine Learning"
+        },
+        "abstract": "Recent work shows that chain based sampling for power shaped trajectory distributions can deliver large test time gains from a fixed base LLM and can approach RL trained reasoners such as GRPO without additional training. Deployment is the bottleneck. Autoregressive Metropolis Hastings is inherently serial, limits GPU utilization, and exhibits extreme tail latency at high budgets. We propose Adaptive Sequential Monte Carlo (ASMC), a parallel particle inference method that targets power shaped trajectory distributions while adapting particle populations to problem hardness. To make resampling practical for Transformers, we introduce cache coherent resampling, which realizes ancestry updates by reordering KV caches and other particle bound tensors, avoiding prefix recomputation. On MATH500 at the same budget, ASMC attains 80.6% exact-match accuracy with p95 = 73.7s, substantially reducing the tail latency of sequential MCMC and providing additional high-accuracy operating points beyond the saturation of best-of-n. We further analyze particle degeneracy and find that collapse severity, measured by low ESS_min/N, strongly predicts failures, while sensitivity to the resampling scheme is limited.",
+        "keywords": ["sequence-level power sampling", "adaptive sequential Monte Carlo", "cache-coherent resampling", "LLM reasoning", "test-time scaling", "KV cache"],
+        "license": "https://opensource.org/licenses/MIT",
+        "sameAs": [
+          "https://openreview.net/pdf?id=JN6wxUGmW8",
+          "https://github.com/Vicky-0256/ASMC"
+        ],
+        "encoding": {
+          "@type": "MediaObject",
+          "contentUrl": "https://vicky-0256.github.io/ASMC/paper.pdf",
+          "encodingFormat": "application/pdf"
+        }
+      }
+    </script>
+    <style>
+      :root { color-scheme: light; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #172033; background: #fbfaf7; }
+      body { margin: 0; }
+      main { width: min(980px, calc(100% - 2rem)); margin: 0 auto; padding: 3rem 0 4rem; }
+      h1, h2 { font-family: Georgia, "Times New Roman", serif; color: #0f172a; }
+      h1 { max-width: 850px; font-size: clamp(2rem, 5vw, 3.25rem); line-height: 1.1; margin: 0.5rem 0 1rem; }
+      h2 { margin-top: 2.5rem; font-size: 1.65rem; }
+      p, li { max-width: 78ch; line-height: 1.7; }
+      .eyebrow { color: #475569; font-size: 0.8rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; }
+      .authors { color: #475569; font-size: 1.05rem; }
+      .links { display: flex; flex-wrap: wrap; gap: 0.75rem 1rem; margin: 1.5rem 0; }
+      a { color: #1d4ed8; }
+      .status { margin: 2rem 0; padding: 1rem 1.25rem; border-left: 4px solid #d97706; background: #fffbeb; }
+      .card { padding: 1.25rem; border: 1px solid #dbe1e8; border-radius: 0.5rem; background: #fff; }
+      pre { overflow-x: auto; white-space: pre-wrap; word-break: break-word; padding: 1rem; border-radius: 0.4rem; background: #f1f5f9; font-size: 0.85rem; line-height: 1.55; }
+      button { cursor: pointer; padding: 0.55rem 0.8rem; border: 1px solid #94a3b8; border-radius: 0.35rem; background: #fff; color: #1e293b; font-weight: 650; }
+      footer { border-top: 1px solid #dbe1e8; padding: 1.5rem 0 0; color: #64748b; font-size: 0.9rem; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="eyebrow">International Conference on Machine Learning · 2026</div>
+        <h1>Cache Coherent Resampling for Efficient Test Time Scaling in LLM Reasoning via Adaptive Sequential Monte Carlo</h1>
+        <p class="authors">Ke Wang · Zehao Yu · Luwei Wang · Yongchao Huang</p>
+        <div class="links">
+          <a href="/ASMC/paper.pdf">Paper PDF</a>
+          <a href="https://openreview.net/pdf?id=JN6wxUGmW8">OpenReview</a>
+          <a href="https://vicky-0256.github.io/ASMC/">Project page</a>
+          <a href="https://github.com/Vicky-0256/ASMC">Code</a>
+          <a href="/ASMC/ASMC_poster.pdf">Poster</a>
+        </div>
+      </header>
+
+      <aside class="status"><strong>Artifact status.</strong> This page reports the ICML 2026 camera-ready results. The corrected public ASMC implementation and CPU tests are available. A corrected, audited 500-problem GPU rerun is pending. See <a href="https://github.com/Vicky-0256/ASMC/blob/main/docs/result_integrity.md">Result Integrity</a> and <a href="https://github.com/Vicky-0256/ASMC/blob/main/docs/reproducibility.md">Reproducibility</a> for the exact evidence boundary.</aside>
+
+      <section>
+        <h2>Abstract</h2>
+        <p>Recent work shows that chain based sampling for power shaped trajectory distributions can deliver large test time gains from a fixed base LLM and can approach RL trained reasoners such as GRPO without additional training. Deployment is the bottleneck. Autoregressive Metropolis Hastings is inherently serial, limits GPU utilization, and exhibits extreme tail latency at high budgets. We propose Adaptive Sequential Monte Carlo (ASMC), a parallel particle inference method that targets power shaped trajectory distributions while adapting particle populations to problem hardness. To make resampling practical for Transformers, we introduce cache coherent resampling, which realizes ancestry updates by reordering KV caches and other particle bound tensors, avoiding prefix recomputation. On MATH500 at the same budget, ASMC attains 80.6% exact-match accuracy with p95 = 73.7s, substantially reducing the tail latency of sequential MCMC and providing additional high-accuracy operating points beyond the saturation of best-of-n. We further analyze particle degeneracy and find that collapse severity, measured by low ESS_min/N, strongly predicts failures, while sensitivity to the resampling scheme is limited.</p>
+      </section>
+
+      <section class="card">
+        <h2>Paper citation</h2>
+        <p>Wang, K., Yu, Z., Wang, L., &amp; Huang, Y. (2026). Cache coherent resampling for efficient test time scaling in LLM reasoning via adaptive sequential Monte Carlo. In Forty-third International Conference on Machine Learning.</p>
+        <pre id="bibtex">@inproceedings{wang2026cache,
+  title     = {Cache Coherent Resampling for Efficient Test Time Scaling in LLM Reasoning via Adaptive Sequential Monte Carlo},
+  author    = {Wang, Ke and Yu, Zehao and Wang, Luwei and Huang, Yongchao},
+  booktitle = {Forty-third International Conference on Machine Learning},
+  year      = {2026}
+}</pre>
+        <button type="button" id="copy-bibtex">Copy BibTeX</button>
+      </section>
+
+      <footer>
+        <p><a href="https://github.com/Vicky-0256/ASMC/discussions">Discussions</a> are for reproduction Q&amp;A, results, and ideas. The software is released under the <a href="https://github.com/Vicky-0256/ASMC/blob/main/LICENSE">MIT License</a>.</p>
+      </footer>
+    </main>
+    <script>
+      document.getElementById("copy-bibtex").addEventListener("click", async () => {
+        const value = document.getElementById("bibtex").textContent;
+        try {
+          await navigator.clipboard.writeText(value);
+        } catch {
+          const area = document.createElement("textarea");
+          area.value = value;
+          document.body.appendChild(area);
+          area.select();
+          document.execCommand("copy");
+          area.remove();
+        }
+        document.getElementById("copy-bibtex").textContent = "Copied";
+      });
+    </script>
+  </body>
+</html>

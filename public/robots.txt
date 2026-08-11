@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://vicky-0256.github.io/ASMC/sitemap.xml
