@@ -210,7 +210,16 @@ PDF at full resolution.
 
 If you use ASMC, sequence-level power sampling, or cache-coherent resampling,
 please cite the accompanying paper. See [`CITATION.cff`](CITATION.cff) for the
-preferred paper citation and machine-readable software metadata.
+preferred paper citation and machine-readable software metadata. The BibTeX
+entry is:
+
+```bibtex
+@inproceedings{wang2026cache,
+  title={Cache Coherent Resampling for Efficient Test Time Scaling in LLM Reasoning via Adaptive Sequential Monte Carlo},
+  author={Wang, Ke and Yu, Zehao and Wang, Luwei and Huang, Yongchao},
+  booktitle={Forty-third International Conference on Machine Learning}
+}
+```
 
 ## License
 
