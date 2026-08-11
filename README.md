@@ -222,19 +222,27 @@ $p_\theta(x \mid c)^\alpha$, without an external reward or learned twist.
 
 ### Concurrent Particle Power Sampling
 
-[Power-SMC](https://arxiv.org/abs/2602.10273) (Azizi et al., 2026) is concurrent
-work that also applies SMC to the global sequence-level power distribution.
-Both methods target complete-trajectory power sampling and replace serial MCMC
-with GPU-parallel particles. They emphasize complementary aspects:
+[Power-SMC](https://arxiv.org/abs/2602.10273) (Azizi et al., 2026)
+is closely related concurrent work that also applies Sequential Monte Carlo
+to sequence-level power sampling.
 
-- ASMC: adaptive fast-to-hard allocation, cache-coherent KV/state resampling,
-  deployment-oriented p50/p95 latency, and particle-collapse diagnostics;
-- Power-SMC: prefix-only proposal analysis, Rényi-entropy characterization of
-  weight instability, and exponent-bridging proposal stabilization.
+ASMC and Power-SMC were developed independently. The ASMC method was already
+part of our ICML 2026 submission before the first public release of Power-SMC,
+while Power-SMC became publicly available earlier during ASMC's double-blind
+review period.
 
-We view ASMC and Power-SMC as concurrent and complementary approaches to
-efficient sequence-level power sampling. Full related-work BibTeX entries are
-in [`docs/related_work.md`](docs/related_work.md).
+The two methods share the goal of efficient sequence-level power sampling while
+emphasizing complementary aspects:
+
+- **ASMC:** adaptive fast-to-hard particle allocation, cache-coherent KV/state
+  resampling without prefix replay, deployment-oriented p50/p95 latency, and
+  empirical particle-collapse diagnostics.
+- **Power-SMC:** prefix-only proposal analysis, Rényi-entropy characterization
+  of weight instability, and exponent-bridging proposal stabilization.
+
+We view the two works as complementary contributions toward practical
+particle-based sequence-level power sampling. Full related-work BibTeX entries
+are in [`docs/related_work.md`](docs/related_work.md).
 
 ## Citation
 
