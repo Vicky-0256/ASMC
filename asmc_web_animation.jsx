@@ -363,6 +363,48 @@ function CitationSection({ id, onCopy, copiedFormat, compact = false }) {
   );
 }
 
+function SiteFooter() {
+  const links = [
+    ["Paper", "https://openreview.net/pdf?id=JN6wxUGmW8", true],
+    ["Code", "https://github.com/Vicky-0256/ASMC", true],
+    ["BibTeX", "#cite", false],
+    ["License", "https://github.com/Vicky-0256/ASMC/blob/main/LICENSE", true],
+    ["Result integrity", "https://github.com/Vicky-0256/ASMC/blob/main/docs/result_integrity.md", true],
+    ["Contact", "https://github.com/Vicky-0256/ASMC/discussions", true],
+  ];
+
+  return (
+    <footer className="border-t border-slate-200 bg-white/80">
+      <div className="mx-auto grid max-w-[1180px] gap-6 px-5 py-9 lg:grid-cols-[1fr_auto] lg:items-start lg:px-8">
+        <div>
+          <div className="paper-serif text-xl font-semibold text-slate-950">Cache-Coherent ASMC</div>
+          <p className="mt-2 max-w-xl text-sm leading-6 text-slate-600">
+            Adaptive Sequential Monte Carlo for sequence-level power sampling in LLM reasoning.
+          </p>
+          <p className="mt-3 text-xs leading-5 text-slate-500">
+            GitHub Discussions is the community space for reproduction Q&amp;A, results, and ideas; use Issues for concrete bugs and tasks.
+          </p>
+        </div>
+        <nav className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-3 lg:grid-cols-2" aria-label="Footer links">
+          {links.map(([label, href, external]) => (
+            <a
+              key={label}
+              href={href}
+              {...(external ? { target: "_blank", rel: "noreferrer" } : {})}
+              className={`font-semibold text-slate-600 underline decoration-slate-300 underline-offset-2 hover:text-slate-950 ${focusClass()}`}
+            >
+              {label}
+            </a>
+          ))}
+        </nav>
+      </div>
+      <div className="border-t border-slate-200 px-5 py-3 text-center text-xs text-slate-500 lg:px-8">
+        © 2026 ASMC · MIT License · <a className={`underline decoration-slate-300 underline-offset-2 hover:text-slate-950 ${focusClass()}`} href="https://github.com/Vicky-0256/ASMC/discussions" target="_blank" rel="noreferrer">Discuss reproduction, results, and ideas</a>
+      </div>
+    </footer>
+  );
+}
+
 function MotivationSection() {
   return (
     <section id="motivation" className="py-14">
@@ -651,6 +693,7 @@ export default function ASMCPaperPage() {
         <TakeawaysSection />
         <CitationSection id="cite-footer" onCopy={copyCitation} copiedFormat={copyStatus} compact />
       </main>
+      <SiteFooter />
     </div>
   );
 }
