@@ -1,32 +1,78 @@
-# Cache Coherent Resampling for Efficient Test Time Scaling in LLM Reasoning via Adaptive Sequential Monte Carlo
+# Cache-Coherent ASMC
 
-Official implementation accompanying the paper by Ke Wang, Zehao Yu, Luwei Wang, and Yongchao Huang.
+### Adaptive Sequential Monte Carlo for Sequence-Level Power Sampling in LLMs
 
-ASMC replaces a serial trajectory-level Markov chain with a parallel population of particles. Its cache-coherent resampling path applies each ancestor mapping directly to the particles' KV caches, avoiding full prefix replay after resampling.
+Official implementation of the ICML 2026 paper:
 
-> **Release status: ASMC-only pre-release.** The public artifact is scoped to
-> running and auditing the corrected fixed and adaptive ASMC protocols on
-> MATH500. It does not promise reproduction of the paper's baselines,
-> compute-matched comparison table, Appendix C, or every figure. The repository
-> does not yet contain a corrected GPU rerun, so the camera-ready ASMC numbers
-> are **not reproduced or verified here**. See
-> [Result-integrity status](#result-integrity-status) and
-> [the ASMC reproducibility guide](docs/reproducibility.md).
+**Cache Coherent Resampling for Efficient Test Time Scaling in LLM Reasoning
+via Adaptive Sequential Monte Carlo**
 
-## Interactive explainer and algorithm overview
+[Paper](ASMC_paper.pdf) · [Project Page](https://vicky-0256.github.io/ASMC/) ·
+[Poster](#poster) · [Citation](CITATION.cff)
 
-The companion webpage from the `page` branch is deployed at
-[vicky-0256.github.io/ASMC](https://vicky-0256.github.io/ASMC/). It contains the
-full interactive particle, ESS, resampling, and KV-cache walkthrough. Click the
-algorithm walkthrough below to open the interactive page:
+---
+
+## What is ASMC?
+
+ASMC is a training-free particle inference method targeting the sequence-level
+power distribution
+
+$$
+\pi_\alpha(x \mid c) \propto p_\theta(x \mid c)^\alpha,\qquad \alpha > 1.
+$$
+
+Unlike token-wise low-temperature sampling, ASMC targets the power
+transformation of the complete autoregressive trajectory. It combines:
+
+- GPU-parallel Sequential Monte Carlo;
+- ESS-triggered particle resampling;
+- cache-coherent KV-state reordering;
+- adaptive particle allocation; and
+- particle-collapse diagnostics.
 
 [![ASMC with cache coherence: algorithm overview](docs/assets/ASMC_newest.png)](https://vicky-0256.github.io/ASMC/)
 
-This is the algorithm overview figure from the camera-ready paper
-(`fig:asmc`); the linked webpage provides the interactive version. The webpage
-and its historical figures are explanatory material, not a claim that the old
-paper numbers have been reproduced. The release status and audited ASMC path
-above remain authoritative.
+This is the algorithm overview figure from the camera-ready paper (`fig:asmc`).
+Open the [interactive ASMC explainer](https://vicky-0256.github.io/ASMC/) for the
+animated particle, ESS, resampling, and KV-cache walkthrough.
+
+> **Reproducibility note.** The current public release contains corrected ASMC
+> execution and auditing paths. Some historical camera-ready operating points
+> are undergoing corrected GPU reruns. See
+> [Reproducibility and Result Integrity](#reproducibility-and-result-integrity)
+> for the complete status and scope.
+
+## Quick Start
+
+After installing the dependencies described in [Installation](#installation),
+run this one-problem MATH500 smoke test. It checks the public ASMC path with a
+small particle population; it is not a paper-quality evaluation:
+
+```bash
+python asmc_full_comparison.py \
+  --save_str results/smoke \
+  --model qwen_math \
+  --attn_implementation sdpa \
+  --dataset MATH \
+  --cot \
+  --batch_idx 0 \
+  --n_problems 1 \
+  --seed 0 \
+  --max_tokens 256 \
+  --n_particles 4 \
+  --block_size 32 \
+  --ess_threshold 0.5 \
+  --epsilon 0.05 \
+  --alpha_start 1.5 \
+  --anneal_tokens 64 \
+  --fixed \
+  --run_asmc \
+  --use_batched
+```
+
+The public default protocol does **not** apply the historical ASMC-only
+minimum-length/stop-token constraint. Use `--legacy_stop_constraints` only for
+an explicitly labelled historical-protocol inspection run.
 
 ## Poster
 
@@ -97,44 +143,6 @@ Confirm that the command-line entry point imports successfully:
 python asmc_full_comparison.py --help
 python -m unittest discover -s tests -v
 ```
-
-## Quick start
-
-The following command runs one MATH500 problem with a deliberately small particle population. It is a functional smoke test, not a paper-quality evaluation:
-
-```bash
-python asmc_full_comparison.py \
-  --save_str results/smoke \
-  --model qwen_math \
-  --attn_implementation sdpa \
-  --dataset MATH \
-  --cot \
-  --batch_idx 0 \
-  --n_problems 1 \
-  --seed 0 \
-  --max_tokens 256 \
-  --n_particles 4 \
-  --block_size 32 \
-  --ess_threshold 0.5 \
-  --epsilon 0.05 \
-  --alpha_start 1.5 \
-  --anneal_tokens 64 \
-  --fixed \
-  --run_asmc \
-  --use_batched
-```
-
-The public default protocol does **not** apply the historical ASMC-only
-minimum-length/stop-token constraint. Historical paper runs used that
-behavior. Use `--legacy_stop_constraints` only for an explicitly labelled
-protocol-inspection run; it is not part of the corrected public default and
-does not make the old paper results reproducible. The corrected release will
-publish separate fixed (`--fixed`) and adaptive (`--adaptive`) ASMC
-configurations and audited result manifests.
-
-In adaptive mode, `--n_particles N` denotes the hard-pass population and the
-fast pass uses `N/2` particles by default. `--hard_n_particles` is available
-only for explicitly documented ablations.
 
 ## ASMC-only reproduction path
 
@@ -227,7 +235,7 @@ historical-protocol run.
 
 For the current strict shard-audit command and its required CSV schema, see [`results/paper/README.md`](results/paper/README.md).
 
-## Result-integrity status
+## Reproducibility and Result Integrity
 
 The ASMC release audit identified the following distinctions that must remain
 explicit:
@@ -331,7 +339,7 @@ See [`data/README.md`](data/README.md) for dataset checksums, upstream sources,
 and unresolved provenance/licensing items. Resolving the MATH500 subset's
 provenance and redistribution terms remains a release blocker.
 
-## Reproducibility
+## Reproducibility Guide
 
 The full protocol, required metadata, integrity checks, and artifact-release checklist are documented in [`docs/reproducibility.md`](docs/reproducibility.md).
 
