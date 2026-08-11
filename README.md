@@ -209,9 +209,7 @@ PDF at full resolution.
 ## Citation
 
 If you use ASMC, sequence-level power sampling, or cache-coherent resampling,
-please cite the accompanying paper. See [`CITATION.cff`](CITATION.cff) for the
-preferred paper citation and machine-readable software metadata. The BibTeX
-entry is:
+please cite the accompanying paper. Copy this BibTeX entry directly:
 
 ```bibtex
 @inproceedings{wang2026cache,
@@ -220,6 +218,9 @@ entry is:
   booktitle={Forty-third International Conference on Machine Learning}
 }
 ```
+
+Machine-readable citation metadata is also available in
+[`CITATION.cff`](CITATION.cff).
 
 ## License
 
