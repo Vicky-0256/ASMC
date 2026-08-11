@@ -1,6 +1,8 @@
 cff-version: 1.2.0
-message: "If you use this software, please cite the accompanying paper."
-title: "Cache Coherent Resampling for Efficient Test Time Scaling in LLM Reasoning via Adaptive Sequential Monte Carlo"
+message: >
+  If you use ASMC, sequence-level power sampling, or cache-coherent
+  resampling, please cite the accompanying ICML 2026 paper.
+title: "ASMC: Cache-Coherent Adaptive Sequential Monte Carlo"
 type: software
 authors:
   - family-names: Wang
@@ -12,9 +14,29 @@ authors:
   - family-names: Huang
     given-names: Yongchao
 repository-code: "https://github.com/Vicky-0256/ASMC"
-url: "https://github.com/Vicky-0256/ASMC"
+url: "https://vicky-0256.github.io/ASMC/"
 keywords:
+  - sequence-level power sampling
+  - power sampling
   - sequential Monte Carlo
+  - adaptive sequential Monte Carlo
   - test-time scaling
-  - large language models
+  - LLM reasoning
   - KV cache
+  - cache-coherent resampling
+
+preferred-citation:
+  type: conference-paper
+  title: "Cache Coherent Resampling for Efficient Test Time Scaling in LLM Reasoning via Adaptive Sequential Monte Carlo"
+  authors:
+    - family-names: Wang
+      given-names: Ke
+    - family-names: Yu
+      given-names: Zehao
+    - family-names: Wang
+      given-names: Luwei
+    - family-names: Huang
+      given-names: Yongchao
+  year: 2026
+  conference:
+    name: "International Conference on Machine Learning"
