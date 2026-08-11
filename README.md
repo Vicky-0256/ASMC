@@ -254,9 +254,10 @@ please cite the accompanying paper. Copy this BibTeX entry directly:
 
 ```bibtex
 @inproceedings{wang2026cache,
-  title={Cache Coherent Resampling for Efficient Test Time Scaling in LLM Reasoning via Adaptive Sequential Monte Carlo},
-  author={Wang, Ke and Yu, Zehao and Wang, Luwei and Huang, Yongchao},
-  booktitle={Forty-third International Conference on Machine Learning}
+  title     = {Cache Coherent Resampling for Efficient Test Time Scaling in LLM Reasoning via Adaptive Sequential Monte Carlo},
+  author    = {Wang, Ke and Yu, Zehao and Wang, Luwei and Huang, Yongchao},
+  booktitle = {Forty-third International Conference on Machine Learning},
+  year      = {2026}
 }
 ```
 
