@@ -13,20 +13,20 @@ ASMC replaces a serial trajectory-level Markov chain with a parallel population 
 > [Result-integrity status](#result-integrity-status) and
 > [the ASMC reproducibility guide](docs/reproducibility.md).
 
-## Interactive explainer
+## Interactive explainer and algorithm overview
 
 The companion webpage from the `page` branch is deployed at
 [vicky-0256.github.io/ASMC](https://vicky-0256.github.io/ASMC/). It contains the
 full interactive particle, ESS, resampling, and KV-cache walkthrough. Click the
-preview below to open it:
+algorithm walkthrough below to open the interactive page:
 
-[![Animated ASMC particle and KV-cache walkthrough](docs/assets/asmc_kv_cache.gif)](https://vicky-0256.github.io/ASMC/)
+[![ASMC with cache coherence: algorithm overview](docs/assets/ASMC_newest.png)](https://vicky-0256.github.io/ASMC/)
 
-The GIF is a lightweight README-compatible storyboard; GitHub Markdown cannot
-execute the webpage's React animation inline. The webpage and its historical
-figures are explanatory material, not a claim that the old paper numbers have
-been reproduced. The release status and audited ASMC path above remain
-authoritative.
+This is the algorithm overview figure from the camera-ready paper
+(`fig:asmc`); the linked webpage provides the interactive version. The webpage
+and its historical figures are explanatory material, not a claim that the old
+paper numbers have been reproduced. The release status and audited ASMC path
+above remain authoritative.
 
 ## What is included
 
